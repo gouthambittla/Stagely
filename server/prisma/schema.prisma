@@ -1,0 +1,85 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int            @id @default(autoincrement())
+  email        String         @unique
+  passwordHash String
+  role         String         // CUSTOMER, ARTIST, ADMIN
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  artistProfile    ArtistProfile?
+  customerBookings Booking[]      @relation("CustomerBookings")
+  sentMessages     Message[]      @relation("UserSentMessages")
+}
+
+model ArtistProfile {
+  id                 Int                @id @default(autoincrement())
+  userId             Int                @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artistName         String
+  category           String             // Band, Solo Musician, Singer, Dancer, etc.
+  genres             String             // JSON string array of genres
+  location           String             // City (e.g., Hyderabad)
+  baseFee            Int                // In INR
+  bio                String?
+  requirements       String?            // Stage & Sound technical requirements
+  youtubeUrl         String?
+  instagramUrl       String?
+  verificationStatus String             @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  availabilitySlots  AvailabilitySlot[]
+  bookings           Booking[]          @relation("ArtistBookings")
+}
+
+model AvailabilitySlot {
+  id        Int           @id @default(autoincrement())
+  artistId  Int
+  artist    ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  date      String        // YYYY-MM-DD
+  startTime String        // HH:mm
+  endTime   String        // HH:mm
+  isBooked  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  booking   Booking?
+
+  @@unique([artistId, date, startTime])
+}
+
+model Booking {
+  id            Int              @id @default(autoincrement())
+  customerId    Int
+  customer      User             @relation("CustomerBookings", fields: [customerId], references: [id])
+  artistId      Int
+  artist        ArtistProfile    @relation("ArtistBookings", fields: [artistId], references: [id])
+  slotId        Int              @unique
+  slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
+  eventType     String
+  eventLocation String
+  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, COMPLETED
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  messages      Message[]
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  bookingId Int
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  senderId  Int
+  sender    User     @relation("UserSentMessages", fields: [senderId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
