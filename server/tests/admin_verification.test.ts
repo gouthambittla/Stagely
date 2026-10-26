@@ -23,12 +23,26 @@ describe('Admin Verification API', () => {
     });
     customerToken = customerLogin.body.token;
 
-    // 3. Find the seeded pending artist (Deccan Groove Collective)
-    const pendingProfile = await prisma.artistProfile.findFirst({
-      where: { verificationStatus: VerificationStatus.PENDING_VERIFICATION }
+    // 3. Create a fresh pending artist for this test suite
+    const pendingUser = await prisma.user.create({
+      data: {
+        email: `pending_${Date.now()}@stagely.in`,
+        passwordHash: 'hashed_pw',
+        role: UserRole.ARTIST,
+        artistProfile: {
+          create: {
+            artistName: 'Test Pending Collective',
+            category: 'Band',
+            genres: JSON.stringify(['Fusion']),
+            location: 'Hyderabad',
+            baseFee: 20000,
+            verificationStatus: VerificationStatus.PENDING_VERIFICATION
+          }
+        }
+      },
+      include: { artistProfile: true }
     });
-    expect(pendingProfile).toBeDefined();
-    pendingArtistId = pendingProfile!.id;
+    pendingArtistId = pendingUser.artistProfile!.id;
   });
 
   afterAll(async () => {
