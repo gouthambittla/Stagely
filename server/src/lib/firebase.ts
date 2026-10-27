@@ -36,8 +36,8 @@ function getFirebaseApp(): any {
 }
 
 export async function verifyFirebaseIdToken(token: string): Promise<DecodedFirebaseToken> {
-  // Test mode mock tokens support
-  if (process.env.NODE_ENV === 'test' && token.startsWith('mock_')) {
+  // Support mock tokens during testing and local development (for Expo Go testing)
+  if (process.env.NODE_ENV !== 'production' && token.startsWith('mock_')) {
     if (token === 'mock_invalid_token') {
       throw new Error('Invalid or expired Firebase ID token');
     }
