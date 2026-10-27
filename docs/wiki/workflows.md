@@ -1,6 +1,26 @@
 # Workflows & State Machines
 
-## 1. Artist Verification Lifecycle
+## 1. Firebase Passwordless Authentication Lifecycle
+```
+[User Launches App]
+         │
+         ├── Primary: Phone Number (+91) ──▶ SMS OTP (6 Digits) ──▶ Firebase ID Token
+         └── Fallback: Email Address ─────▶ Magic Link Tap ────────▶ Firebase ID Token
+                                                                            │
+                                                                            ▼
+                                                               Backend Verification
+                                                                            │
+                                               ┌────────────────────────────┴───────────────────────────┐
+                                               ▼                                                        ▼
+                                       [Existing User]                                            [New User]
+                                               │                                                        │
+                                        Load User Profile                                    Role & Name Selection
+                                               │                                                        │
+                                               ▼                                                        ▼
+                                        Role Dashboard                                     Save Profile & Enter App
+```
+
+## 2. Artist Verification Lifecycle
 ```
 [Artist Registers & Completes Onboarding]
                    │

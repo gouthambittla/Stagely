@@ -3,33 +3,68 @@ import app from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { VerificationStatus, UserRole } from '../src/types';
 
-describe('Auth & Artist Onboarding API', () => {
-  const testEmail = `artist_${Date.now()}@stagely.in`;
+describe('Auth & Artist Onboarding API (Firebase)', () => {
+  const newArtistToken = `mock_new_user_artist_${Date.now()}`;
+  let registeredUserId: number;
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: testEmail } });
+    if (registeredUserId) {
+      await prisma.user.deleteMany({ where: { id: registeredUserId } });
+    }
     await prisma.$disconnect();
   });
 
-  it('registers artist and enforces PENDING_VERIFICATION on onboarding', async () => {
-    // 1. Register new artist account
-    const regRes = await request(app).post('/api/auth/register').send({
-      email: testEmail,
-      password: 'password123',
-      role: UserRole.ARTIST
-    });
+  it('detects new user when Firebase UID is not yet registered', async () => {
+    const res = await request(app)
+      .post('/api/auth/firebase')
+      .send({ idToken: newArtistToken });
 
-    expect(regRes.status).toBe(201);
-    expect(regRes.body.token).toBeDefined();
-    expect(regRes.body.user.email).toBe(testEmail);
-    expect(regRes.body.user.role).toBe(UserRole.ARTIST);
+    expect(res.status).toBe(200);
+    expect(res.body.isNewUser).toBe(true);
+    expect(res.body.firebaseUid).toBeDefined();
+  });
 
-    const token = regRes.body.token;
+  it('completes signup for new user with role and name', async () => {
+    const res = await request(app)
+      .post('/api/auth/complete-signup')
+      .send({
+        idToken: newArtistToken,
+        role: UserRole.ARTIST,
+        name: 'Charminar Chords Lead'
+      });
 
-    // 2. Complete onboarding form
+    expect(res.status).toBe(201);
+    expect(res.body.user).toBeDefined();
+    expect(res.body.user.role).toBe(UserRole.ARTIST);
+    expect(res.body.user.name).toBe('Charminar Chords Lead');
+    registeredUserId = res.body.user.id;
+  });
+
+  it('returns existing user on subsequent /api/auth/firebase calls', async () => {
+    const res = await request(app)
+      .post('/api/auth/firebase')
+      .send({ idToken: newArtistToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isNewUser).toBe(false);
+    expect(res.body.user.id).toBe(registeredUserId);
+    expect(res.body.user.name).toBe('Charminar Chords Lead');
+  });
+
+  it('allows authenticated user to fetch own profile via GET /api/auth/me', async () => {
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${newArtistToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(registeredUserId);
+    expect(res.body.role).toBe(UserRole.ARTIST);
+  });
+
+  it('allows authenticated artist to complete onboarding wizard', async () => {
     const onboardRes = await request(app)
       .post('/api/artists/onboard')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${newArtistToken}`)
       .send({
         artistName: 'Charminar Chords',
         category: 'Band',
@@ -50,16 +85,5 @@ describe('Auth & Artist Onboarding API', () => {
     expect(onboardRes.body.artistProfile.verificationStatus).toBe(VerificationStatus.PENDING_VERIFICATION);
     expect(onboardRes.body.artistProfile.baseFee).toBe(30000);
     expect(onboardRes.body.artistProfile.availabilitySlots.length).toBe(2);
-  });
-
-  it('authenticates existing user and returns JWT token', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({
-      email: 'admin@stagely.in',
-      password: 'admin123'
-    });
-
-    expect(loginRes.status).toBe(200);
-    expect(loginRes.body.token).toBeDefined();
-    expect(loginRes.body.user.role).toBe(UserRole.ADMIN);
   });
 });

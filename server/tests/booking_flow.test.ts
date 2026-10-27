@@ -11,32 +11,46 @@ describe('Discovery & Booking Flow', () => {
   let createdBookingId: number;
 
   beforeAll(async () => {
-    // 1. Customer login
-    const custLogin = await request(app).post('/api/auth/login').send({
-      email: 'organizer@breweryhyd.in',
-      password: 'password123'
-    });
-    customerToken = custLogin.body.token;
+    customerToken = 'mock_customer_token';
+    artistToken = 'mock_artist_token';
 
-    // 2. Artist login (Jammers)
-    const artLogin = await request(app).post('/api/auth/login').send({
-      email: 'jammers@stagely.in',
-      password: 'password123'
-    });
-    artistToken = artLogin.body.token;
-
-    // 3. Find verified artist and slot
+    // 3. Find verified artist and slot (Jammers)
     const artist = await prisma.artistProfile.findFirst({
-      where: { verificationStatus: VerificationStatus.VERIFIED },
-      include: { availabilitySlots: { where: { isBooked: false } } }
+      where: {
+        verificationStatus: VerificationStatus.VERIFIED,
+        user: { email: 'jammers@stagely.in' }
+      },
+      include: { availabilitySlots: true }
     });
     expect(artist).toBeDefined();
     verifiedArtistId = artist!.id;
-    expect(artist!.availabilitySlots.length).toBeGreaterThan(0);
-    availableSlotId = artist!.availabilitySlots[0].id;
+
+    let slot = artist!.availabilitySlots.find((s) => !s.isBooked);
+    if (!slot) {
+      slot = await prisma.availabilitySlot.create({
+        data: {
+          artistId: artist!.id,
+          date: '2026-11-15',
+          startTime: '19:00',
+          endTime: '22:00',
+          isBooked: false
+        }
+      });
+    }
+    availableSlotId = slot.id;
   });
 
   afterAll(async () => {
+    if (createdBookingId) {
+      await prisma.message.deleteMany({ where: { bookingId: createdBookingId } });
+      await prisma.booking.deleteMany({ where: { id: createdBookingId } });
+    }
+    if (availableSlotId) {
+      await prisma.availabilitySlot.update({
+        where: { id: availableSlotId },
+        data: { isBooked: false }
+      }).catch(() => {});
+    }
     await prisma.$disconnect();
   });
 

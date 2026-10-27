@@ -19,7 +19,10 @@ export enum BookingStatus {
 
 export interface AuthUser {
   id: number;
-  email: string;
+  firebaseUid: string;
+  email?: string | null;
+  phone?: string | null;
+  name?: string | null;
   role: UserRole;
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Music, Sparkles, ChevronRight, UserCheck } from 'lucide-react-native';
 
@@ -11,7 +12,7 @@ interface LandingScreenProps {
 export const LandingScreen: React.FC<LandingScreenProps> = ({ onSelectRole, onAdminLogin }) => {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B0D13" />
+      <StatusBar style="light" />
 
       {/* Header & Hero Branding */}
       <View style={styles.heroSection}>
