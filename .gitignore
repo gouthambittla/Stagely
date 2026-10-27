@@ -39,3 +39,10 @@ Thumbs.db
 
 # Antigravity / Superpowers scratch & ledger
 .superpowers/sdd/
+
+# Firebase credentials & client config files
+google-services.json
+GoogleService-Info.plist
+*serviceAccount*.json
+*service-account*.json
+
