@@ -15,11 +15,11 @@
 - **Runtime**: Node.js with Express.js (TypeScript).
 - **ORM**: Prisma ORM.
 - **Database**: PostgreSQL (SQLite supported locally for friction-free prototyping).
-- **Authentication**: JWT with Role-Based Access Control (`CUSTOMER`, `ARTIST`, `ADMIN`).
+- **Authentication**: Firebase Authentication (Phone OTP primary, Passwordless Email Magic Link secondary) with Role-Based Access Control (`CUSTOMER`, `ARTIST`, `ADMIN`). Single Firebase ID token architecture verified server-side via `firebase-admin`. No passwords stored.
 - **Communication**: REST endpoints + In-App Messaging threads.
 
 ### 3. Core Entities
-- **User**: Base account (`id`, `email`, `passwordHash`, `role`, `createdAt`).
+- **User**: Base account (`id`, `firebaseUid`, `email`, `phone`, `name`, `role`, `createdAt`).
 - **ArtistProfile**: Linked to User (`artistName`, `category`, `genres`, `location`, `fee`, `bio`, `requirements`, `youtubeUrl`, `instagramUrl`, `verificationStatus: PENDING_VERIFICATION | VERIFIED | REJECTED`).
 - **AvailabilitySlot**: Linked to ArtistProfile (`date`, `startTime`, `endTime`, `isBooked`).
 - **Booking**: Linked to Customer and Artist (`slotId`, `eventLocation`, `eventType`, `status: REQUESTED | ACCEPTED | DECLINED | COMPLETED`, `notes`).

@@ -4,31 +4,31 @@ import { authenticate, AuthenticatedRequest } from '../middlewares/auth.middlewa
 
 const router = Router();
 
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/firebase', async (req: Request, res: Response) => {
   try {
-    const { email, password, role } = req.body;
-    if (!email || !password || !role) {
-      res.status(400).json({ error: 'Email, password, and role are required' });
+    const { idToken } = req.body;
+    if (!idToken) {
+      res.status(400).json({ error: 'idToken is required' });
       return;
     }
-    const result = await AuthService.register(email, password, role);
-    res.status(201).json(result);
+    const result = await AuthService.syncFirebaseUser(idToken);
+    res.status(200).json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Registration failed' });
+    res.status(401).json({ error: err.message || 'Firebase authentication failed' });
   }
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/complete-signup', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
+    const { idToken, role, name, email, phone } = req.body;
+    if (!idToken || !role || !name) {
+      res.status(400).json({ error: 'idToken, role, and name are required' });
       return;
     }
-    const result = await AuthService.login(email, password);
-    res.status(200).json(result);
+    const result = await AuthService.completeSignup({ idToken, role, name, email, phone });
+    res.status(201).json(result);
   } catch (err: any) {
-    res.status(401).json({ error: err.message || 'Login failed' });
+    res.status(400).json({ error: err.message || 'Signup completion failed' });
   }
 });
 

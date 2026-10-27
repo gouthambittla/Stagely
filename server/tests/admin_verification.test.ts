@@ -9,25 +9,15 @@ describe('Admin Verification API', () => {
   let pendingArtistId: number;
 
   beforeAll(async () => {
-    // 1. Login as Admin
-    const adminLogin = await request(app).post('/api/auth/login').send({
-      email: 'admin@stagely.in',
-      password: 'admin123'
-    });
-    adminToken = adminLogin.body.token;
+    adminToken = 'mock_admin_token';
+    customerToken = 'mock_customer_token';
 
-    // 2. Login as Customer
-    const customerLogin = await request(app).post('/api/auth/login').send({
-      email: 'organizer@breweryhyd.in',
-      password: 'password123'
-    });
-    customerToken = customerLogin.body.token;
-
-    // 3. Create a fresh pending artist for this test suite
+    // Create a fresh pending artist for this test suite
     const pendingUser = await prisma.user.create({
       data: {
+        firebaseUid: `mock_pending_${Date.now()}`,
         email: `pending_${Date.now()}@stagely.in`,
-        passwordHash: 'hashed_pw',
+        name: 'Test Pending Collective Lead',
         role: UserRole.ARTIST,
         artistProfile: {
           create: {

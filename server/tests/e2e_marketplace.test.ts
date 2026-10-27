@@ -17,22 +17,18 @@ describe('Stagely Complete Marketplace End-to-End Journey', () => {
   let createdBookingId: number;
 
   beforeAll(async () => {
-    // 1. Authenticate as Admin
-    const adminLogin = await request(app).post('/api/auth/login').send({
-      email: adminEmail,
-      password: 'admin123'
-    });
-    expect(adminLogin.status).toBe(200);
-    adminToken = adminLogin.body.token;
+    adminToken = 'mock_admin_token';
+    const mockCustomerToken = `mock_new_user_cust_${timestamp}`;
 
-    // 2. Register Customer (Venue Bookers)
-    const custReg = await request(app).post('/api/auth/register').send({
-      email: customerEmail,
-      password: 'venuepassword123',
-      role: UserRole.CUSTOMER
+    // Register Customer (Venue Bookers)
+    const custReg = await request(app).post('/api/auth/complete-signup').send({
+      idToken: mockCustomerToken,
+      role: UserRole.CUSTOMER,
+      name: 'E2E Venue Bookers',
+      email: customerEmail
     });
     expect(custReg.status).toBe(201);
-    customerToken = custReg.body.token;
+    customerToken = mockCustomerToken;
   });
 
   afterAll(async () => {
@@ -55,13 +51,15 @@ describe('Stagely Complete Marketplace End-to-End Journey', () => {
 
   it('Phase 1: Artist registers and completes onboarding wizard', async () => {
     // 1. Register Artist User
-    const regRes = await request(app).post('/api/auth/register').send({
-      email: artistEmail,
-      password: 'bandpassword123',
-      role: UserRole.ARTIST
+    const mockArtistToken = `mock_new_user_artist_${timestamp}`;
+    const regRes = await request(app).post('/api/auth/complete-signup').send({
+      idToken: mockArtistToken,
+      role: UserRole.ARTIST,
+      name: `Banjara Beats ${timestamp}`,
+      email: artistEmail
     });
     expect(regRes.status).toBe(201);
-    artistToken = regRes.body.token;
+    artistToken = mockArtistToken;
 
     // 2. Artist Submits Onboarding Form
     const onboardRes = await request(app)

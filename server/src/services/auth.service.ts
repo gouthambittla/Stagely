@@ -1,62 +1,89 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
-import { JWT_SECRET } from '../middlewares/auth.middleware';
+import { verifyFirebaseIdToken } from '../lib/firebase';
 import { UserRole } from '../types';
 
-export class AuthService {
-  static async register(email: string, password: string, role: UserRole) {
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      throw new Error('User already exists with this email');
-    }
+export interface CompleteSignupInput {
+  idToken: string;
+  role: UserRole;
+  name: string;
+  email?: string;
+  phone?: string;
+}
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        role
+export class AuthService {
+  static async syncFirebaseUser(idToken: string) {
+    const decoded = await verifyFirebaseIdToken(idToken);
+
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: decoded.uid },
+      include: {
+        artistProfile: {
+          include: {
+            availabilitySlots: true
+          }
+        }
       }
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: '7d'
-    });
+    if (!user) {
+      return {
+        isNewUser: true,
+        firebaseUid: decoded.uid,
+        email: decoded.email || null,
+        phone: decoded.phone_number || null,
+        name: decoded.name || null
+      };
+    }
 
     return {
-      user: { id: user.id, email: user.email, role: user.role },
-      token
+      isNewUser: false,
+      user: {
+        id: user.id,
+        firebaseUid: user.firebaseUid,
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+        artistProfile: user.artistProfile
+      }
     };
   }
 
-  static async login(email: string, password: string) {
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { artistProfile: true }
+  static async completeSignup(input: CompleteSignupInput) {
+    const { idToken, role, name, email, phone } = input;
+    const decoded = await verifyFirebaseIdToken(idToken);
+
+    const existing = await prisma.user.findUnique({
+      where: { firebaseUid: decoded.uid }
     });
 
-    if (!user) {
-      throw new Error('Invalid email or password');
+    if (existing) {
+      throw new Error('User already registered');
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      throw new Error('Invalid email or password');
-    }
+    const resolvedEmail = email || decoded.email || null;
+    const resolvedPhone = phone || decoded.phone_number || null;
+    const resolvedName = name || decoded.name || 'User';
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: '7d'
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid: decoded.uid,
+        email: resolvedEmail,
+        phone: resolvedPhone,
+        name: resolvedName,
+        role
+      }
     });
 
     return {
       user: {
         id: user.id,
+        firebaseUid: user.firebaseUid,
         email: user.email,
-        role: user.role,
-        artistProfile: user.artistProfile
-      },
-      token
+        phone: user.phone,
+        name: user.name,
+        role: user.role
+      }
     };
   }
 
@@ -78,7 +105,10 @@ export class AuthService {
 
     return {
       id: user.id,
+      firebaseUid: user.firebaseUid,
       email: user.email,
+      phone: user.phone,
+      name: user.name,
       role: user.role,
       artistProfile: user.artistProfile
     };

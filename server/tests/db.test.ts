@@ -12,8 +12,9 @@ describe('Database Models', () => {
 
     const user = await prisma.user.create({
       data: {
+        firebaseUid: 'band_firebase_uid_001',
         email: 'band@stagely.in',
-        passwordHash: 'hashed_secret_123',
+        name: 'Hyderabad Fusion Collective Lead',
         role: UserRole.ARTIST,
         artistProfile: {
           create: {
@@ -51,5 +52,23 @@ describe('Database Models', () => {
     expect(user.artistProfile?.baseFee).toBe(25000);
     expect(user.artistProfile?.availabilitySlots.length).toBe(1);
     expect(user.artistProfile?.availabilitySlots[0].date).toBe('2026-11-01');
+  });
+
+  it('creates user with firebaseUid and no passwordHash', async () => {
+    await prisma.user.deleteMany({ where: { firebaseUid: 'test_firebase_uid_123' } as any });
+
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid: 'test_firebase_uid_123',
+        phone: '+919876543210',
+        name: 'Rohan Sharma',
+        role: UserRole.CUSTOMER
+      } as any
+    });
+
+    expect(user.id).toBeDefined();
+    expect((user as any).firebaseUid).toBe('test_firebase_uid_123');
+    expect((user as any).passwordHash).toBeUndefined();
+    await prisma.user.delete({ where: { id: user.id } });
   });
 });

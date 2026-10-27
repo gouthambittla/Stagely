@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "344412838163",
+    "project_id": "stagely-b22eb",
+    "storage_bucket": "stagely-b22eb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:344412838163:android:2187c52b2f92f54de7a2e6",
+        "android_client_info": {
+          "package_name": "com.stagely.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "344412838163-aqnfqa0ogvcer0hak76cj74g5t7ecv2u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4JiN5JnpEIBYhvp0kf5vwaGpG7n0-CMQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "344412838163-aqnfqa0ogvcer0hak76cj74g5t7ecv2u.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "344412838163-fvtt63a8kckmdljsbbshfh9ol2jh2gs4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.stagely.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

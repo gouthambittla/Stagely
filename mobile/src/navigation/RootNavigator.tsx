@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { useAuth, UserRole } from '../context/AuthContext';
-import LandingScreen from '../screens/LandingScreen';
-import AuthScreen from '../screens/AuthScreen';
+import { useAuth } from '../context/AuthContext';
+import { PhoneLoginScreen } from '../screens/auth/PhoneLoginScreen';
+import { OtpVerificationScreen } from '../screens/auth/OtpVerificationScreen';
+import { EmailLinkScreen } from '../screens/auth/EmailLinkScreen';
+import { RoleAndNameScreen } from '../screens/auth/RoleAndNameScreen';
 import ExploreScreen from '../screens/customer/ExploreScreen';
 import ArtistDetailScreen from '../screens/customer/ArtistDetailScreen';
 import MyBookingsScreen from '../screens/customer/MyBookingsScreen';
@@ -11,12 +13,15 @@ import ArtistDashboardScreen from '../screens/artist/ArtistDashboardScreen';
 import ScheduleManagerScreen from '../screens/artist/ScheduleManagerScreen';
 import ChatScreen from '../screens/common/ChatScreen';
 import AdminVerificationScreen from '../screens/admin/AdminVerificationScreen';
-import { Music, Calendar, MessageSquare, User as UserIcon, Compass } from 'lucide-react-native';
+import { Music, Calendar, User as UserIcon, Compass } from 'lucide-react-native';
 
 export const RootNavigator: React.FC = () => {
-  const { user, isLoading, logout } = useAuth();
-  const [selectedRoleForAuth, setSelectedRoleForAuth] = useState<UserRole | null>(null);
-  const [showAuthScreen, setShowAuthScreen] = useState<boolean>(false);
+  const { user, isNewUser, isLoading, logout } = useAuth();
+
+  // Auth flow sub-step state
+  const [authStep, setAuthStep] = useState<'PHONE' | 'OTP' | 'EMAIL'>('PHONE');
+  const [confirmationResult, setConfirmationResult] = useState<any | null>(null);
+  const [pendingPhone, setPendingPhone] = useState<string>('');
 
   // Customer Navigation State
   const [customerTab, setCustomerTab] = useState<'EXPLORE' | 'BOOKINGS' | 'PROFILE'>('EXPLORE');
@@ -37,33 +42,46 @@ export const RootNavigator: React.FC = () => {
     );
   }
 
-  // 1. Unauthenticated Flows
+  // 1. First-time User Profile Creation (Role & Name picker)
+  if (isNewUser) {
+    return <RoleAndNameScreen />;
+  }
+
+  // 2. Unauthenticated Flows (Phone OTP or Email Link)
   if (!user) {
-    if (showAuthScreen) {
+    if (authStep === 'OTP' && confirmationResult) {
       return (
-        <AuthScreen
-          initialRole={selectedRoleForAuth || 'CUSTOMER'}
-          onBack={() => setShowAuthScreen(false)}
-          onSuccess={() => setShowAuthScreen(false)}
+        <OtpVerificationScreen
+          confirmation={confirmationResult}
+          phoneNumber={pendingPhone}
+          onBack={() => setAuthStep('PHONE')}
+          onSuccess={() => setAuthStep('PHONE')}
+        />
+      );
+    }
+
+    if (authStep === 'EMAIL') {
+      return (
+        <EmailLinkScreen
+          onBack={() => setAuthStep('PHONE')}
+          onSuccess={() => setAuthStep('PHONE')}
         />
       );
     }
 
     return (
-      <LandingScreen
-        onSelectRole={(role) => {
-          setSelectedRoleForAuth(role);
-          setShowAuthScreen(true);
+      <PhoneLoginScreen
+        onOtpSent={(confirmation, phone) => {
+          setConfirmationResult(confirmation);
+          setPendingPhone(phone);
+          setAuthStep('OTP');
         }}
-        onAdminLogin={() => {
-          setSelectedRoleForAuth('ADMIN');
-          setShowAuthScreen(true);
-        }}
+        onUseEmail={() => setAuthStep('EMAIL')}
       />
     );
   }
 
-  // 2. Active Chat Modal
+  // 3. Active Chat Modal
   if (activeChatBooking) {
     return (
       <ChatScreen
@@ -73,14 +91,13 @@ export const RootNavigator: React.FC = () => {
     );
   }
 
-  // 3. ADMIN Flow
+  // 4. ADMIN Flow
   if (user.role === 'ADMIN') {
     return <AdminVerificationScreen />;
   }
 
-  // 4. ARTIST Flow
+  // 5. ARTIST Flow
   if (user.role === 'ARTIST') {
-    // Check if artist has completed onboarding
     if (!user.artistProfile) {
       return <OnboardingWizardScreen onComplete={() => setArtistTab('DASHBOARD')} />;
     }
@@ -101,7 +118,7 @@ export const RootNavigator: React.FC = () => {
             <View style={styles.profileContainer}>
               <View style={styles.profileCard}>
                 <Text style={styles.profileName}>{user.artistProfile.artistName}</Text>
-                <Text style={styles.profileEmail}>{user.email}</Text>
+                <Text style={styles.profileEmail}>{user.email || user.phone || 'Artist Account'}</Text>
                 <View style={styles.profileStatusPill}>
                   <Text style={styles.profileStatusText}>
                     Status: {user.artistProfile.verificationStatus}
@@ -151,7 +168,7 @@ export const RootNavigator: React.FC = () => {
     );
   }
 
-  // 5. CUSTOMER Flow
+  // 6. CUSTOMER Flow
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -178,8 +195,8 @@ export const RootNavigator: React.FC = () => {
             {customerTab === 'PROFILE' && (
               <View style={styles.profileContainer}>
                 <View style={styles.profileCard}>
-                  <Text style={styles.profileName}>Booker Account</Text>
-                  <Text style={styles.profileEmail}>{user.email}</Text>
+                  <Text style={styles.profileName}>{user.name || 'Booker Account'}</Text>
+                  <Text style={styles.profileEmail}>{user.email || user.phone || 'Stagely User'}</Text>
                   <Text style={styles.profileRole}>Role: Customer / Event Host</Text>
                 </View>
                 <TouchableOpacity style={styles.logoutButton} onPress={logout}>

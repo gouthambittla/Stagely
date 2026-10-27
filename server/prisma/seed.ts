@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -13,23 +12,24 @@ async function main() {
   await prisma.artistProfile.deleteMany();
   await prisma.user.deleteMany();
 
-  const defaultPassword = await bcrypt.hash('password123', 10);
-  const adminPassword = await bcrypt.hash('admin123', 10);
-
   // 1. Admin User
   await prisma.user.create({
     data: {
+      firebaseUid: 'firebase_admin_uid_001',
       email: 'admin@stagely.in',
-      passwordHash: adminPassword,
+      phone: '+919800000001',
+      name: 'Stagely Admin',
       role: 'ADMIN'
     }
   });
 
   // 2. Verified Hyderabad Band: Jammers
-  const jammersUser = await prisma.user.create({
+  await prisma.user.create({
     data: {
+      firebaseUid: 'firebase_artist_uid_001',
       email: 'jammers@stagely.in',
-      passwordHash: defaultPassword,
+      phone: '+919800000002',
+      name: 'Jammers Hyderabad Lead',
       role: 'ARTIST',
       artistProfile: {
         create: {
@@ -59,8 +59,10 @@ async function main() {
   // 3. Verified Solo Acoustic Artist: Ramya Sharma
   await prisma.user.create({
     data: {
+      firebaseUid: 'firebase_artist_uid_002',
       email: 'ramya@stagely.in',
-      passwordHash: defaultPassword,
+      phone: '+919800000003',
+      name: 'Ramya Sharma',
       role: 'ARTIST',
       artistProfile: {
         create: {
@@ -89,8 +91,10 @@ async function main() {
   // 4. Pending Artist (Waiting for Admin Verification): Deccan Groove
   await prisma.user.create({
     data: {
+      firebaseUid: 'firebase_artist_uid_003',
       email: 'deccan@stagely.in',
-      passwordHash: defaultPassword,
+      phone: '+919800000004',
+      name: 'Deccan Groove Lead',
       role: 'ARTIST',
       artistProfile: {
         create: {
@@ -117,8 +121,10 @@ async function main() {
   // 5. Customer (Pub / Event Organizer)
   await prisma.user.create({
     data: {
+      firebaseUid: 'firebase_customer_uid_001',
       email: 'organizer@breweryhyd.in',
-      passwordHash: defaultPassword,
+      phone: '+919800000005',
+      name: 'Brewery Hyd Events',
       role: 'CUSTOMER'
     }
   });
