@@ -38,7 +38,7 @@ Thumbs.db
 *.swo
 
 # Antigravity / Superpowers scratch & ledger
-.superpowers/sdd/
+.superpowers/
 
 # Firebase credentials & client config files
 google-services.json
