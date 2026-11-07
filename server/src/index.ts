@@ -3,11 +3,13 @@ dotenv.config();
 
 import app from './app';
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Stagely API server is running on http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Stagely API server is running on http://0.0.0.0:${PORT}`);
+  console.log(`   Local: http://localhost:${PORT}`);
+  console.log(`   LAN:   http://192.168.1.37:${PORT}`);
+  console.log(`   Health check: http://192.168.1.37:${PORT}/health`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
