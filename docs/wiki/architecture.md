@@ -17,6 +17,12 @@
   - "Stagely Verified • Auditioned Live Stage Sound" trust badges on artist cards.
   - Pre-filled venue name & locality in booking forms directly from customer profile.
   - Dedicated `CustomerProfileScreen` with edit mode and active/completed gig statistics.
+- **Artist Experience & Studio Features**:
+  - Dedicated `ArtistStudioScreen` acting as the profile management hub and gig operations center.
+  - Gig metric cards for Completed Shows (`completedGigsCount`), Confirmed Upcoming Gigs (`upcomingGigsCount`), and Pending Inquiries (`pendingRequestsCount`) — strictly omitting any total earnings display.
+  - Sound & Stage Technical Rider card showcasing live audio equipment requirements (microphones, monitors, mixers, DI boxes).
+  - Studio Profile Customizer modal to update minimum performance fee (in INR ₹), sound rider, musical genres, artist bio, and social handles (Instagram, YouTube).
+  - Quick action to open the 15-day rolling Schedule Manager.
 
 ### 2. Backend Server (`/server`)
 - **Runtime**: Node.js with Express.js (TypeScript).
@@ -28,6 +34,9 @@
   - `GET /api/users/me`: Returns user profile along with aggregated `activeBookingsCount` and `completedBookingsCount`.
   - `PUT /api/users/me`: Updates venue details (`name`, `venueName`, `city`, `contactPhone`) without mutating auth credentials.
   - `GET /api/artists`: Multi-dimensional discovery engine filtering by `date` (open slots only), budget range (`minFee`, `maxFee`), multi-genre selection (`genres`), `category`, and `search`.
+- **Artist Studio & Profile Management Services**:
+  - `GET /api/artists/my-profile`: Returns authenticated artist profile details and performance statistics (`completedGigsCount`, `upcomingGigsCount`, `pendingRequestsCount`), strictly omitting any earnings calculations.
+  - `PUT /api/artists/my-profile`: Updates artist fee (enforcing minimum ₹1,000 threshold), sound rider requirements, genres, bio, and social links with role-based validation.
 
 ### 3. Core Entities
 - **User**: Base account (`id`, `firebaseUid`, `email`, `phone`, `name`, `venueName`, `city`, `contactPhone`, `role`, `createdAt`, `updatedAt`).

@@ -115,6 +115,41 @@ export interface UserProfileResponse {
   };
 }
 
+export interface ArtistStudioProfileResponse {
+  profile: {
+    id: number;
+    userId: number;
+    artistName: string;
+    category: string;
+    genres: string;
+    location: string;
+    baseFee: number;
+    bio?: string | null;
+    requirements?: string | null;
+    youtubeUrl?: string | null;
+    instagramUrl?: string | null;
+    verificationStatus: string;
+    availabilitySlots: any[];
+  };
+  stats: {
+    completedGigsCount: number;
+    pendingRequestsCount: number;
+    upcomingGigsCount: number;
+  };
+}
+
+export interface UpdateArtistProfileInput {
+  artistName?: string;
+  category?: string;
+  genres?: string[];
+  location?: string;
+  baseFee?: number;
+  bio?: string;
+  requirements?: string;
+  youtubeUrl?: string;
+  instagramUrl?: string;
+}
+
 export const api = {
   // Auth
   syncFirebaseUser: (idToken: string) =>
@@ -146,7 +181,9 @@ export const api = {
   // Artist Management
   onboardArtist: (body: any) => request<any>('/artists/onboard', { method: 'POST', body: JSON.stringify(body) }),
   updateSchedule: (slots: any[]) => request<any>('/artists/schedule', { method: 'POST', body: JSON.stringify({ slots }) }),
-  getMyProfile: () => request<{ profile: any }>('/artists/my-profile'),
+  getMyProfile: () => request<ArtistStudioProfileResponse>('/artists/my-profile'),
+  updateArtistProfile: (body: UpdateArtistProfileInput) =>
+    request<ArtistStudioProfileResponse>('/artists/my-profile', { method: 'PUT', body: JSON.stringify(body) }),
 
   // Bookings & Messages
   createBooking: (body: any) => request<any>('/bookings', { method: 'POST', body: JSON.stringify(body) }),
