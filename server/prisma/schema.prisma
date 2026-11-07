@@ -58,7 +58,7 @@ model AvailabilitySlot {
   isBooked  Boolean       @default(false)
   createdAt DateTime      @default(now())
 
-  booking   Booking?
+  bookings  Booking[]
 
   @@unique([artistId, date, startTime])
 }
@@ -69,7 +69,7 @@ model Booking {
   customer      User             @relation("CustomerBookings", fields: [customerId], references: [id])
   artistId      Int
   artist        ArtistProfile    @relation("ArtistBookings", fields: [artistId], references: [id])
-  slotId        Int              @unique
+  slotId        Int
   slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
   eventType     String
   eventLocation String
