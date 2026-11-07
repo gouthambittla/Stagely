@@ -125,6 +125,9 @@ async function main() {
       email: 'organizer@breweryhyd.in',
       phone: '+919800000005',
       name: 'Brewery Hyd Events',
+      venueName: 'Heart Cup Coffee',
+      city: 'Jubilee Hills, Hyderabad',
+      contactPhone: '+919849012345',
       role: 'CUSTOMER'
     }
   });
