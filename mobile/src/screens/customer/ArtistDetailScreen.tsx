@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,9 @@ import {
   Youtube,
   Instagram,
   Mic2,
-  FileText
+  FileText,
+  ShieldCheck,
+  Check
 } from 'lucide-react-native';
 
 interface ArtistDetailScreenProps {
@@ -39,9 +41,25 @@ export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState<boolean>(false);
   const [eventType, setEventType] = useState<string>('Pub Live Band');
-  const [eventLocation, setEventLocation] = useState<string>('Jubilee Hills, Hyderabad');
+  const [eventLocation, setEventLocation] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Pre-populate customer's venue and city from profile
+    api.getProfile()
+      .then(res => {
+        if (res?.user?.venueName || res?.user?.city) {
+          const parts = [res.user.venueName, res.user.city].filter(Boolean);
+          if (parts.length > 0) {
+            setEventLocation(parts.join(', '));
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Could not prefill venue location from customer profile:', err);
+      });
+  }, []);
 
   const genres: string[] =
     typeof artist.genres === 'string' ? JSON.parse(artist.genres) : artist.genres || [];
@@ -115,8 +133,17 @@ export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
           </View>
 
           <View style={styles.feeCard}>
-            <Text style={styles.feeCardLabel}>Standard Performance Fee</Text>
+            <View style={styles.feeHeaderRow}>
+              <Text style={styles.feeCardLabel}>Standard Performance Fee</Text>
+              <View style={styles.guaranteeTag}>
+                <Check size={11} color="#10B981" />
+                <Text style={styles.guaranteeTagText}>Zero Agency Markup</Text>
+              </View>
+            </View>
             <Text style={styles.feeCardAmount}>₹{artist.baseFee.toLocaleString('en-IN')}</Text>
+            <Text style={styles.feeCardSubtext}>
+              Includes full standard 2-hour live performance. Direct settlement with artist.
+            </Text>
           </View>
         </View>
 
@@ -396,7 +423,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     padding: 14,
-    marginTop: 4
+    marginTop: 4,
+    gap: 4
+  },
+  feeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  guaranteeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#064E3B',
+    borderColor: '#059669',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 4
+  },
+  guaranteeTagText: {
+    color: '#34D399',
+    fontSize: 10,
+    fontWeight: '700'
   },
   feeCardLabel: {
     color: '#F5A623',
@@ -406,8 +455,13 @@ const styles = StyleSheet.create({
   },
   feeCardAmount: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
+    marginTop: 2
+  },
+  feeCardSubtext: {
+    color: '#94A3B8',
+    fontSize: 11,
     marginTop: 2
   },
   section: {
