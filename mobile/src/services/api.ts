@@ -70,6 +70,37 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return data as T;
 }
 
+export interface ArtistFilterParams {
+  location?: string;
+  category?: string;
+  search?: string;
+  date?: string;
+  minFee?: number;
+  maxFee?: number;
+  genres?: string;
+}
+
+export interface UserProfileResponse {
+  user: {
+    id: number;
+    firebaseUid: string;
+    email: string | null;
+    phone: string | null;
+    name: string | null;
+    venueName: string | null;
+    city: string | null;
+    contactPhone: string | null;
+    role: string;
+    createdAt: string;
+    updatedAt: string;
+    artistProfile?: any;
+  };
+  stats: {
+    activeBookingsCount: number;
+    completedBookingsCount: number;
+  };
+}
+
 export const api = {
   // Auth
   syncFirebaseUser: (idToken: string) =>
@@ -78,9 +109,22 @@ export const api = {
     request<any>('/auth/complete-signup', { method: 'POST', body: JSON.stringify(body) }),
   getMe: () => request<any>('/auth/me'),
 
+  // User Profile
+  getProfile: () => request<UserProfileResponse>('/users/me'),
+  updateProfile: (body: { name?: string; venueName?: string; city?: string; contactPhone?: string }) =>
+    request<{ user: any }>('/users/me', { method: 'PUT', body: JSON.stringify(body) }),
+
   // Discovery (Verified Artists only)
-  getArtists: (params?: { location?: string; category?: string; search?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
+  getArtists: (params?: ArtistFilterParams) => {
+    const cleanedParams: Record<string, string> = {};
+    if (params) {
+      Object.entries(params).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== '') {
+          cleanedParams[key] = String(val);
+        }
+      });
+    }
+    const query = new URLSearchParams(cleanedParams).toString();
     return request<{ artists: any[] }>(`/artists${query ? `?${query}` : ''}`);
   },
   getArtistById: (id: number) => request<{ artist: any }>(`/artists/${id}`),
