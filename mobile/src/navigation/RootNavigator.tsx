@@ -12,6 +12,7 @@ import CustomerProfileScreen from '../screens/customer/CustomerProfileScreen';
 import OnboardingWizardScreen from '../screens/artist/OnboardingWizardScreen';
 import ArtistDashboardScreen from '../screens/artist/ArtistDashboardScreen';
 import ScheduleManagerScreen from '../screens/artist/ScheduleManagerScreen';
+import ArtistStudioScreen from '../screens/artist/ArtistStudioScreen';
 import ChatScreen from '../screens/common/ChatScreen';
 import AdminVerificationScreen from '../screens/admin/AdminVerificationScreen';
 import { Music, Calendar, User as UserIcon, Compass } from 'lucide-react-native';
@@ -116,20 +117,7 @@ export const RootNavigator: React.FC = () => {
             <ScheduleManagerScreen onBack={() => setArtistTab('DASHBOARD')} />
           )}
           {artistTab === 'PROFILE' && (
-            <View style={styles.profileContainer}>
-              <View style={styles.profileCard}>
-                <Text style={styles.profileName}>{user.artistProfile.artistName}</Text>
-                <Text style={styles.profileEmail}>{user.email || user.phone || 'Artist Account'}</Text>
-                <View style={styles.profileStatusPill}>
-                  <Text style={styles.profileStatusText}>
-                    Status: {user.artistProfile.verificationStatus}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-                <Text style={styles.logoutButtonText}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
+            <ArtistStudioScreen onManageSchedule={() => setArtistTab('SCHEDULE')} />
           )}
         </View>
 
