@@ -151,7 +151,8 @@ export class BookingService {
         where: { customerId: userId },
         include: {
           artist: true,
-          slot: true
+          slot: true,
+          review: true
         },
         orderBy: { createdAt: 'desc' }
       });

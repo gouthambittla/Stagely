@@ -65,100 +65,7 @@ export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
       })
       .finally(() => {
         setLoadingReviews(false);
-        ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#3B270C',
-    borderColor: '#F5A623',
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8
-  },
-  ratingBadgeText: {
-    color: '#F5A623',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  reviewsList: {
-    gap: 12,
-    marginTop: 8
-  },
-  reviewCard: {
-    backgroundColor: '#131722',
-    borderColor: '#1E293B',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10
-  },
-  reviewCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 10
-  },
-  reviewerName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  reviewerCity: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 2
-  },
-  reviewStarsRow: {
-    flexDirection: 'row',
-    gap: 2
-  },
-  reviewComment: {
-    color: '#E2E8F0',
-    fontSize: 13,
-    fontStyle: 'italic',
-    lineHeight: 18
-  },
-  reviewTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6
-  },
-  reviewTagBadge: {
-    backgroundColor: '#0B0D13',
-    borderColor: '#334155',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6
-  },
-  reviewTagBadgeText: {
-    color: '#F5A623',
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  emptyReviewsCard: {
-    backgroundColor: '#131722',
-    borderColor: '#1E293B',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8
-  },
-  emptyReviewsTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700'
-  },
-  emptyReviewsText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    textAlign: 'center'
-  },
-});
+      });
   }, [artist.id]);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -823,6 +730,99 @@ const styles = StyleSheet.create({
     color: '#0B0D13',
     fontSize: 15,
     fontWeight: '700'
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3B270C',
+    borderColor: '#F5A623',
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  ratingBadgeText: {
+    color: '#F5A623',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  reviewsList: {
+    gap: 12,
+    marginTop: 8
+  },
+  reviewCard: {
+    backgroundColor: '#131722',
+    borderColor: '#1E293B',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    gap: 10
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10
+  },
+  reviewerName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  reviewerCity: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2
+  },
+  reviewStarsRow: {
+    flexDirection: 'row',
+    gap: 2
+  },
+  reviewComment: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 18
+  },
+  reviewTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6
+  },
+  reviewTagBadge: {
+    backgroundColor: '#0B0D13',
+    borderColor: '#334155',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  reviewTagBadgeText: {
+    color: '#F5A623',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  emptyReviewsCard: {
+    backgroundColor: '#131722',
+    borderColor: '#1E293B',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8
+  },
+  emptyReviewsTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  emptyReviewsText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center'
   }
 });
 
