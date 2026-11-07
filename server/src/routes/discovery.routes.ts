@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/artists - Public Catalog (STRICTLY VERIFIED ONLY)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { location, category, search } = req.query;
+    const { location, category, search, date, minFee, maxFee, genres } = req.query;
 
     const whereClause: any = {
       verificationStatus: VerificationStatus.VERIFIED
@@ -21,12 +21,50 @@ router.get('/', async (req: Request, res: Response) => {
       whereClause.category = category;
     }
 
+    if (minFee !== undefined || maxFee !== undefined) {
+      whereClause.baseFee = {};
+      if (minFee !== undefined) {
+        whereClause.baseFee.gte = parseInt(minFee as string, 10);
+      }
+      if (maxFee !== undefined) {
+        whereClause.baseFee.lte = parseInt(maxFee as string, 10);
+      }
+    }
+
+    if (date && typeof date === 'string') {
+      whereClause.availabilitySlots = {
+        some: {
+          date: date,
+          isBooked: false
+        }
+      };
+    }
+
+    const andConditions: any[] = [];
+
     if (search && typeof search === 'string') {
-      whereClause.OR = [
-        { artistName: { contains: search } },
-        { genres: { contains: search } },
-        { bio: { contains: search } }
-      ];
+      andConditions.push({
+        OR: [
+          { artistName: { contains: search } },
+          { genres: { contains: search } },
+          { bio: { contains: search } }
+        ]
+      });
+    }
+
+    if (genres && typeof genres === 'string') {
+      const genreList = genres.split(',').map(g => g.trim()).filter(Boolean);
+      if (genreList.length > 0) {
+        andConditions.push({
+          OR: genreList.map(g => ({
+            genres: { contains: g }
+          }))
+        });
+      }
+    }
+
+    if (andConditions.length > 0) {
+      whereClause.AND = andConditions;
     }
 
     const artists = await prisma.artistProfile.findMany({

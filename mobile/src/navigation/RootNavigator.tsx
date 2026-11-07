@@ -8,6 +8,7 @@ import { RoleAndNameScreen } from '../screens/auth/RoleAndNameScreen';
 import ExploreScreen from '../screens/customer/ExploreScreen';
 import ArtistDetailScreen from '../screens/customer/ArtistDetailScreen';
 import MyBookingsScreen from '../screens/customer/MyBookingsScreen';
+import CustomerProfileScreen from '../screens/customer/CustomerProfileScreen';
 import OnboardingWizardScreen from '../screens/artist/OnboardingWizardScreen';
 import ArtistDashboardScreen from '../screens/artist/ArtistDashboardScreen';
 import ScheduleManagerScreen from '../screens/artist/ScheduleManagerScreen';
@@ -193,16 +194,7 @@ export const RootNavigator: React.FC = () => {
               />
             )}
             {customerTab === 'PROFILE' && (
-              <View style={styles.profileContainer}>
-                <View style={styles.profileCard}>
-                  <Text style={styles.profileName}>{user.name || 'Booker Account'}</Text>
-                  <Text style={styles.profileEmail}>{user.email || user.phone || 'Stagely User'}</Text>
-                  <Text style={styles.profileRole}>Role: Customer / Event Host</Text>
-                </View>
-                <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-                  <Text style={styles.logoutButtonText}>Sign Out</Text>
-                </TouchableOpacity>
-              </View>
+              <CustomerProfileScreen />
             )}
           </>
         )}

@@ -8,14 +8,17 @@ generator client {
 }
 
 model User {
-  id          Int            @id @default(autoincrement())
-  firebaseUid String         @unique
-  email       String?        @unique
-  phone       String?        @unique
-  name        String?
-  role        String         // CUSTOMER, ARTIST, ADMIN
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id               Int            @id @default(autoincrement())
+  firebaseUid      String         @unique
+  email            String?        @unique
+  phone            String?        @unique
+  name             String?
+  venueName        String?
+  city             String?
+  contactPhone     String?
+  role             String         // CUSTOMER, ARTIST, ADMIN
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   artistProfile    ArtistProfile?
   customerBookings Booking[]      @relation("CustomerBookings")

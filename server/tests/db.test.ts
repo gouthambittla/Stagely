@@ -55,7 +55,14 @@ describe('Database Models', () => {
   });
 
   it('creates user with firebaseUid and no passwordHash', async () => {
-    await prisma.user.deleteMany({ where: { firebaseUid: 'test_firebase_uid_123' } as any });
+    await prisma.user.deleteMany({
+      where: {
+        OR: [
+          { firebaseUid: 'test_firebase_uid_123' },
+          { phone: '+919876543210' }
+        ]
+      } as any
+    });
 
     const user = await prisma.user.create({
       data: {
@@ -69,6 +76,35 @@ describe('Database Models', () => {
     expect(user.id).toBeDefined();
     expect((user as any).firebaseUid).toBe('test_firebase_uid_123');
     expect((user as any).passwordHash).toBeUndefined();
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+
+  it('creates customer user with venueName, city, and contactPhone without breaking firebaseUid', async () => {
+    await prisma.user.deleteMany({
+      where: {
+        OR: [
+          { firebaseUid: 'test_customer_venue_uid_999' },
+          { phone: '+919876500000' }
+        ]
+      } as any
+    });
+
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid: 'test_customer_venue_uid_999',
+        phone: '+919876500000',
+        name: 'Vikram Reddy',
+        venueName: 'Aura Brewery & Kitchen',
+        city: 'Jubilee Hills, Hyderabad',
+        contactPhone: '+919988776655',
+        role: 'CUSTOMER'
+      } as any
+    });
+
+    expect(user.id).toBeDefined();
+    expect((user as any).venueName).toBe('Aura Brewery & Kitchen');
+    expect((user as any).contactPhone).toBe('+919988776655');
+    expect((user as any).city).toBe('Jubilee Hills, Hyderabad');
     await prisma.user.delete({ where: { id: user.id } });
   });
 });
