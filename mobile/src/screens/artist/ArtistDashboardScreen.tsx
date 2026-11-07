@@ -145,6 +145,15 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
           <Text style={styles.notesText}>Note: "{item.notes}"</Text>
         ) : null}
 
+        {isRequested ? (
+          <View style={styles.exclusiveBanner}>
+            <Sparkles size={13} color="#F5A623" />
+            <Text style={styles.exclusiveText}>
+              Exclusive Offer: This date is held solely for this venue. Declining reopens it to the public.
+            </Text>
+          </View>
+        ) : null}
+
         {/* Action Buttons */}
         <View style={styles.actionsRow}>
           {isRequested && (
@@ -434,6 +443,23 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 12,
     fontStyle: 'italic'
+  },
+  exclusiveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 166, 35, 0.08)',
+    borderColor: 'rgba(245, 166, 35, 0.25)',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  exclusiveText: {
+    color: '#F5A623',
+    fontSize: 11,
+    fontWeight: '500',
+    flex: 1
   },
   actionsRow: {
     flexDirection: 'row',

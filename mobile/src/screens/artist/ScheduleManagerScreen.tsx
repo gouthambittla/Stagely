@@ -46,7 +46,7 @@ export const ScheduleManagerScreen: React.FC<{ onBack: () => void }> = ({ onBack
 
   const toggleDay = (idx: number) => {
     if (days[idx].isBooked) {
-      Alert.alert('Slot Already Booked', 'This date has an accepted booking and cannot be closed.');
+      Alert.alert('Date Reserved / Booked', 'This date has an active offer or confirmed gig and cannot be toggled.');
       return;
     }
     const copy = [...days];
