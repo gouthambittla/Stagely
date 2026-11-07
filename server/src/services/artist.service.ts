@@ -18,6 +18,18 @@ export interface OnboardArtistInput {
   }>;
 }
 
+export interface UpdateArtistInput {
+  artistName?: string;
+  category?: string;
+  genres?: string[];
+  location?: string;
+  baseFee?: number;
+  bio?: string;
+  requirements?: string;
+  youtubeUrl?: string;
+  instagramUrl?: string;
+}
+
 export class ArtistService {
   static async onboard(userId: number, input: OnboardArtistInput) {
     const existing = await prisma.artistProfile.findUnique({ where: { userId } });
@@ -55,9 +67,30 @@ export class ArtistService {
     return artistProfile;
   }
 
+  static async updateProfile(artistId: number, input: UpdateArtistInput) {
+    const data: any = {};
+    if (input.artistName !== undefined) data.artistName = input.artistName;
+    if (input.category !== undefined) data.category = input.category;
+    if (input.genres !== undefined) data.genres = JSON.stringify(input.genres);
+    if (input.location !== undefined) data.location = input.location;
+    if (input.baseFee !== undefined) data.baseFee = input.baseFee;
+    if (input.bio !== undefined) data.bio = input.bio;
+    if (input.requirements !== undefined) data.requirements = input.requirements;
+    if (input.youtubeUrl !== undefined) data.youtubeUrl = input.youtubeUrl;
+    if (input.instagramUrl !== undefined) data.instagramUrl = input.instagramUrl;
+
+    return prisma.artistProfile.update({
+      where: { id: artistId },
+      data,
+      include: {
+        availabilitySlots: {
+          orderBy: { date: 'asc' }
+        }
+      }
+    });
+  }
+
   static async updateSchedule(artistId: number, slots: Array<{ date: string; startTime: string; endTime: string }>) {
-    // Add new slots if not already existing
-    const createdSlots = [];
     for (const slot of slots) {
       const existing = await prisma.availabilitySlot.findFirst({
         where: {
@@ -68,7 +101,7 @@ export class ArtistService {
       });
 
       if (!existing) {
-        const created = await prisma.availabilitySlot.create({
+        await prisma.availabilitySlot.create({
           data: {
             artistId,
             date: slot.date,
@@ -77,7 +110,6 @@ export class ArtistService {
             isBooked: false
           }
         });
-        createdSlots.push(created);
       }
     }
 
@@ -96,5 +128,39 @@ export class ArtistService {
         }
       }
     });
+  }
+
+  static async getArtistStats(artistId: number) {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const completedGigsCount = await prisma.booking.count({
+      where: {
+        artistId,
+        status: 'COMPLETED'
+      }
+    });
+
+    const pendingRequestsCount = await prisma.booking.count({
+      where: {
+        artistId,
+        status: 'REQUESTED'
+      }
+    });
+
+    const upcomingGigsCount = await prisma.booking.count({
+      where: {
+        artistId,
+        status: 'ACCEPTED',
+        slot: {
+          date: { gte: todayStr }
+        }
+      }
+    });
+
+    return {
+      completedGigsCount,
+      pendingRequestsCount,
+      upcomingGigsCount
+    };
   }
 }

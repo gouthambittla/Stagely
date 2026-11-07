@@ -55,7 +55,7 @@ router.post('/schedule', authenticate, requireRole([UserRole.ARTIST]), async (re
   }
 });
 
-// Get current logged-in artist profile
+// Get current logged-in artist profile with gig statistics
 router.get('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await ArtistService.getProfileByUserId(req.user!.id);
@@ -63,9 +63,46 @@ router.get('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (r
       res.status(404).json({ error: 'Artist profile not found' });
       return;
     }
-    res.status(200).json({ profile });
+
+    const stats = await ArtistService.getArtistStats(profile.id);
+    res.status(200).json({ profile, stats });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch profile' });
+  }
+});
+
+// Update current logged-in artist profile
+router.put('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const profile = await ArtistService.getProfileByUserId(req.user!.id);
+    if (!profile) {
+      res.status(404).json({ error: 'Artist profile not found' });
+      return;
+    }
+
+    const { artistName, category, genres, location, baseFee, bio, requirements, youtubeUrl, instagramUrl } = req.body;
+
+    if (baseFee !== undefined && Number(baseFee) < 1000) {
+      res.status(400).json({ error: 'Base fee must be at least ₹1,000' });
+      return;
+    }
+
+    const updatedProfile = await ArtistService.updateProfile(profile.id, {
+      artistName,
+      category,
+      genres,
+      location,
+      baseFee: baseFee !== undefined ? Number(baseFee) : undefined,
+      bio,
+      requirements,
+      youtubeUrl,
+      instagramUrl
+    });
+
+    const stats = await ArtistService.getArtistStats(profile.id);
+    res.status(200).json({ profile: updatedProfile, stats });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to update artist profile' });
   }
 });
 
