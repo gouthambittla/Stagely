@@ -1,7 +1,21 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { getAuth, getIdToken } from './firebase';
 
 function getApiBaseUrl(): string {
+  // If running in Expo Go or physical device connected to Metro, use the PC host IP
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ||
+    (Constants as any).manifest?.debuggerHost;
+
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:5000/api`;
+    }
+  }
+
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
