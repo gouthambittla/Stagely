@@ -27,7 +27,8 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
 
     res.status(201).json({ message: 'Booking request sent successfully', booking });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to submit booking' });
+    const statusCode = err.statusCode || (err.message && (err.message.includes('already') || err.message.includes('conflict')) ? 409 : 400);
+    res.status(statusCode).json({ error: err.message || 'Failed to submit booking' });
   }
 });
 
