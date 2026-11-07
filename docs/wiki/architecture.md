@@ -51,3 +51,10 @@
 - **Booking**: Linked to Customer and Artist (`slotId`, `eventLocation`, `eventType`, `status: REQUESTED | ACCEPTED | DECLINED | COMPLETED`, `notes`).
 - **Review**: Linked to Booking (1:1), ArtistProfile (N:1), and Customer User (N:1) (`rating: 1-5`, `comment`, `tags`, `createdAt`).
 - **Message**: Linked to Booking/Conversation (`bookingId`, `senderId`, `content`, `createdAt`).
+
+### Concurrency & Single-Offer Guarantee
+To prevent double bookings and competing gig offers on the same night:
+1. **Atomic Transactional Lock**: When `BookingService.createBooking` is invoked, it runs inside a Prisma `$transaction` that queries for any existing booking with status `REQUESTED` or `ACCEPTED` for that artist on that date.
+2. If an active booking exists on that date, the request is immediately rejected with HTTP 409 Conflict.
+3. Upon creating the booking in `REQUESTED` state, the corresponding `AvailabilitySlot` is atomically set to `isBooked = true`, removing it from the public catalog search.
+4. If an artist chooses to `DECLINE` the request, the slot is atomically reset to `isBooked = false`, reopening the night for new bookings.

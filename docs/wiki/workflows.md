@@ -62,17 +62,26 @@
 
 ---
 
-## 4. Request-to-Book Lifecycle
+## 4. Request-to-Book Lifecycle (Single Exclusive Offer Policy)
 ```
 [Customer Selects Available Slot from 15-Day Calendar]
                    │
                    ▼
-          [Status: REQUESTED]
+       Atomic Conflict Validation
+ (Rejects 409 if any REQUESTED/ACCEPTED booking exists for artist on this date)
+                   │
+                   ▼
+           [Status: REQUESTED]
+   (Slot is immediately locked: isBooked = true;
+    Date removed from public catalog discovery)
                    │
         Artist Review in Dashboard
-          ├── Accept  ──▶ [Status: ACCEPTED] (Slot locked on calendar)
-          └── Decline ──▶ [Status: DECLINED] (Slot released back to open pool)
+          ├── Accept  ──▶ [Status: ACCEPTED] (Slot remains permanently locked)
+          └── Decline ──▶ [Status: DECLINED] (Slot unlocked: isBooked = false; reopens for new offers)
 ```
+- **Single Exclusive Offer Guarantee**: An artist can receive at most ONE active gig offer for any given date. Competing requests on the same date are rejected with `409 Conflict`.
+- **Atomic Lock on Request**: As soon as a venue submits a request, the slot is locked (`isBooked = true`) and hidden from other venues in the catalog.
+- **Auto-Release on Decline**: If the artist declines the request, the slot is atomically released (`isBooked = false`) so other venues can discover and book it.
 - A dedicated chat thread is created when a booking enters `REQUESTED` so the customer and artist can converse regarding set times, sound setup, and logistics.
 
 ---
