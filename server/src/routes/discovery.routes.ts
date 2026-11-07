@@ -1,3 +1,4 @@
+import { ReviewService } from '../services/review.service';
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
@@ -102,7 +103,8 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.status(200).json({ artist });
+    const { averageRating, reviewCount } = await ReviewService.getArtistRatingSummary(artist.id);
+    res.status(200).json({ artist, averageRating, reviewCount });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch artist profile' });
   }

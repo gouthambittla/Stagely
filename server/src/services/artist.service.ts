@@ -1,3 +1,4 @@
+import { ReviewService } from './review.service';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
 
@@ -157,7 +158,11 @@ export class ArtistService {
       }
     });
 
+    const { averageRating, reviewCount } = await ReviewService.getArtistRatingSummary(artistId);
+
     return {
+      averageRating,
+      reviewCount,
       completedGigsCount,
       pendingRequestsCount,
       upcomingGigsCount
