@@ -1,4 +1,4 @@
-﻿import { prisma } from '../src/lib/prisma';
+import { prisma } from '../src/lib/prisma';
 import { UserRole, VerificationStatus } from '../src/types';
 
 describe('Database Models', () => {
@@ -55,7 +55,14 @@ describe('Database Models', () => {
   });
 
   it('creates user with firebaseUid and no passwordHash', async () => {
-    await prisma.user.deleteMany({ where: { firebaseUid: 'test_firebase_uid_123' } as any });
+    await prisma.user.deleteMany({
+      where: {
+        OR: [
+          { firebaseUid: 'test_firebase_uid_123' },
+          { phone: '+919876543210' }
+        ]
+      } as any
+    });
 
     const user = await prisma.user.create({
       data: {
@@ -73,7 +80,14 @@ describe('Database Models', () => {
   });
 
   it('creates customer user with venueName, city, and contactPhone without breaking firebaseUid', async () => {
-    await prisma.user.deleteMany({ where: { firebaseUid: 'test_customer_venue_uid_999' } as any });
+    await prisma.user.deleteMany({
+      where: {
+        OR: [
+          { firebaseUid: 'test_customer_venue_uid_999' },
+          { phone: '+919876500000' }
+        ]
+      } as any
+    });
 
     const user = await prisma.user.create({
       data: {
