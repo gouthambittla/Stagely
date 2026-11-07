@@ -150,6 +150,36 @@ export interface UpdateArtistProfileInput {
   instagramUrl?: string;
 }
 
+
+export interface ReviewInput {
+  rating: number;
+  comment?: string;
+  tags?: string[];
+}
+
+export interface ArtistReview {
+  id: number;
+  bookingId: number;
+  artistId: number;
+  customerId: number;
+  rating: number;
+  comment: string | null;
+  tags: string | null;
+  createdAt: string;
+  customer: {
+    id: number;
+    name: string | null;
+    venueName: string | null;
+    city: string | null;
+  };
+}
+
+export interface ArtistReviewsResponse {
+  reviews: ArtistReview[];
+  reviewCount: number;
+  averageRating: number | null;
+}
+
 export const api = {
   // Auth
   syncFirebaseUser: (idToken: string) =>
@@ -176,7 +206,7 @@ export const api = {
     const query = new URLSearchParams(cleanedParams).toString();
     return request<{ artists: any[] }>(`/artists${query ? `?${query}` : ''}`);
   },
-  getArtistById: (id: number) => request<{ artist: any }>(`/artists/${id}`),
+  getArtistById: (id: number) => request<{ artist: any; averageRating?: number | null; reviewCount?: number }>(`/artists/${id}`),
 
   // Artist Management
   onboardArtist: (body: any) => request<any>('/artists/onboard', { method: 'POST', body: JSON.stringify(body) }),
@@ -184,6 +214,15 @@ export const api = {
   getMyProfile: () => request<ArtistStudioProfileResponse>('/artists/my-profile'),
   updateArtistProfile: (body: UpdateArtistProfileInput) =>
     request<ArtistStudioProfileResponse>('/artists/my-profile', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Reviews & Ratings
+  submitBookingReview: (bookingId: number, body: ReviewInput) =>
+    request<{ message: string; review: any }>(`/bookings/${bookingId}/review`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  getArtistReviews: (artistId: number) =>
+    request<ArtistReviewsResponse>(`/artists/${artistId}/reviews`),
 
   // Bookings & Messages
   createBooking: (body: any) => request<any>('/bookings', { method: 'POST', body: JSON.stringify(body) }),
