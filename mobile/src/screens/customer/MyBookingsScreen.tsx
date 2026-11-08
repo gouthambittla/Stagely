@@ -85,6 +85,8 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ onOpenChat, 
         return { bg: '#451A03', text: '#F5A623', border: '#78350F' };
       case 'DECLINED':
         return { bg: '#450A0A', text: '#F87171', border: '#7F1D1D' };
+      case 'EXPIRED':
+        return { bg: '#1F2937', text: '#9CA3AF', border: '#4B5563' };
       default:
         return { bg: '#1E293B', text: '#94A3B8', border: '#334155' };
     }

@@ -2,12 +2,16 @@ import { ReviewService } from '../services/review.service';
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
+import { BookingService } from '../services/booking.service';
 
 const router = Router();
 
 // GET /api/artists - Public Catalog (STRICTLY VERIFIED ONLY)
 router.get('/', async (req: Request, res: Response) => {
   try {
+    // Release nights held by lapsed offers before computing availability
+    await BookingService.expireStaleOffers();
+
     const { location, category, search, date, minFee, maxFee, genres } = req.query;
 
     const whereClause: any = {
@@ -88,6 +92,8 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/artists/:id - Specific Artist Details
 router.get('/:id', async (req: Request, res: Response) => {
   try {
+    await BookingService.expireStaleOffers();
+
     const id = parseInt(req.params.id, 10);
     const artist = await prisma.artistProfile.findUnique({
       where: { id },
