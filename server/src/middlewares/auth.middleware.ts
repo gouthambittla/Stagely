@@ -40,8 +40,9 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
     };
 
     next();
-  } catch (err: any) {
-    res.status(401).json({ error: err.message || 'Invalid or expired Firebase token' });
+  } catch {
+    // Never echo verifier/DB internals to the client
+    res.status(401).json({ error: 'Invalid or expired Firebase token' });
   }
 }
 

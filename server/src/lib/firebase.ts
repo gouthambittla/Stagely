@@ -16,15 +16,16 @@ function getFirebaseApp(): any {
       appInstance = apps[0];
     } else {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        let serviceAccount: unknown;
         try {
-          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-          appInstance = initializeApp({
-            credential: cert(serviceAccount)
-          });
-        } catch (err) {
-          console.warn('Failed to parse FIREBASE_SERVICE_ACCOUNT, falling back to default credential:', err);
-          appInstance = initializeApp();
+          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        } catch {
+          // Fail fast instead of silently running on other credentials; don't log the value.
+          throw new Error('FIREBASE_SERVICE_ACCOUNT is not valid JSON');
         }
+        appInstance = initializeApp({
+          credential: cert(serviceAccount as any)
+        });
       } else if (process.env.NODE_ENV !== 'test') {
         appInstance = initializeApp({
           projectId: process.env.FIREBASE_PROJECT_ID || 'stagely-b22eb'
@@ -35,9 +36,22 @@ function getFirebaseApp(): any {
   return appInstance;
 }
 
+/**
+ * Mock `mock_*` tokens bypass Firebase entirely, so they are only honoured in the test
+ * runner, or in local development when explicitly opted into with ALLOW_MOCK_AUTH=true.
+ * They are never honoured in production, whatever else is set.
+ */
+export function isMockAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NODE_ENV === 'production') return false;
+  return env.NODE_ENV === 'test' || env.ALLOW_MOCK_AUTH === 'true';
+}
+
 export async function verifyFirebaseIdToken(token: string): Promise<DecodedFirebaseToken> {
-  // Support mock tokens during testing and local development (for Expo Go testing)
-  if (process.env.NODE_ENV !== 'production' && token.startsWith('mock_')) {
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new Error('Missing Firebase ID token');
+  }
+  // Mock tokens for the test suite and opt-in local development (Expo Go simulator flow)
+  if (isMockAuthEnabled() && token.startsWith('mock_')) {
     if (token === 'mock_invalid_token') {
       throw new Error('Invalid or expired Firebase ID token');
     }
