@@ -3,6 +3,7 @@ import { Router, Response } from 'express';
 import { ArtistService } from '../services/artist.service';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { UserRole } from '../types';
+import { sendError, parseId } from '../lib/http';
 
 const router = Router();
 
@@ -29,8 +30,8 @@ router.post('/onboard', authenticate, requireRole([UserRole.ARTIST]), async (req
     });
 
     res.status(201).json({ message: 'Onboarding completed successfully', artistProfile });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Onboarding failed' });
+  } catch (err) {
+    sendError(res, err, 400);
   }
 });
 
@@ -51,8 +52,8 @@ router.post('/schedule', authenticate, requireRole([UserRole.ARTIST]), async (re
 
     const updatedSlots = await ArtistService.updateSchedule(profile.id, slots);
     res.status(200).json({ slots: updatedSlots });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to update schedule' });
+  } catch (err) {
+    sendError(res, err, 400);
   }
 });
 
@@ -67,8 +68,8 @@ router.get('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (r
 
     const stats = await ArtistService.getArtistStats(profile.id);
     res.status(200).json({ profile, stats });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch profile' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 
@@ -102,8 +103,8 @@ router.put('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (r
 
     const stats = await ArtistService.getArtistStats(profile.id);
     res.status(200).json({ profile: updatedProfile, stats });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to update artist profile' });
+  } catch (err) {
+    sendError(res, err, 400);
   }
 });
 
@@ -111,11 +112,11 @@ router.put('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (r
 // GET /api/artists/:id/reviews - Publicly fetch verified artist reviews
 router.get('/:id/reviews', async (req, res: Response) => {
   try {
-    const artistId = parseInt(req.params.id, 10);
+    const artistId = parseId(req.params.id, 'artist id');
     const data = await ReviewService.getArtistReviews(artistId);
     res.status(200).json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch artist reviews' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 

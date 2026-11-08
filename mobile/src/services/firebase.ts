@@ -23,7 +23,19 @@ try {
   }
 } catch {
   isNativeModuleAvailable = false;
-  console.log('📱 [Stagely Auth] Running in Expo Go mode (Mock OTP mode enabled).');
+  if (__DEV__) {
+    console.log('📱 [Stagely Auth] Running in Expo Go mode (Mock OTP mode enabled).');
+  }
+}
+
+/**
+ * Simulated auth (mock OTP, mock email link, mock tokens) is a development-only
+ * aid for Expo Go. It must never be reachable in release builds.
+ */
+const SIMULATOR_ENABLED = __DEV__;
+
+function simulatorUnavailable(): Error {
+  return new Error('Authentication service is unavailable. Please update or reinstall the app.');
 }
 
 // In-memory auth state for Expo Go / dev mock fallback
@@ -57,11 +69,14 @@ export async function signInWithPhoneNumber(
     try {
       return await rnfbAuth.signInWithPhoneNumber(auth, phoneNumber);
     } catch (err: any) {
+      if (!SIMULATOR_ENABLED) throw err;
       console.warn('Native signInWithPhoneNumber failed, falling back to simulator:', err);
     }
   }
 
-  // Expo Go Simulation Mode
+  if (!SIMULATOR_ENABLED) throw simulatorUnavailable();
+
+  // Expo Go Simulation Mode (dev only)
   console.log(`📱 [Expo Go] Sending simulated OTP to ${phoneNumber}. Use code: 123456`);
   return {
     confirm: async (verificationCode: string) => {
@@ -112,9 +127,12 @@ export async function sendSignInLinkToEmail(
     try {
       return await rnfbAuth.sendSignInLinkToEmail(auth, email, actionCodeSettings);
     } catch (err) {
+      if (!SIMULATOR_ENABLED) throw err;
       console.warn('Native sendSignInLinkToEmail failed, falling back to simulator:', err);
     }
   }
+
+  if (!SIMULATOR_ENABLED) throw simulatorUnavailable();
 
   console.log(`📱 [Expo Go] Simulated magic link sent to ${email}. Tap link simulation in console.`);
 }
@@ -124,9 +142,10 @@ export function isSignInWithEmailLink(auth: any, emailLink: string): boolean {
     try {
       return rnfbAuth.isSignInWithEmailLink(auth, emailLink);
     } catch {
-      // Fall through
+      if (!SIMULATOR_ENABLED) return false;
     }
   }
+  if (!SIMULATOR_ENABLED) return false;
   return emailLink.includes('stagely') || emailLink.includes('apiKey');
 }
 
@@ -139,9 +158,12 @@ export async function signInWithEmailLink(
     try {
       return await rnfbAuth.signInWithEmailLink(auth, email, emailLink);
     } catch (err) {
+      if (!SIMULATOR_ENABLED) throw err;
       console.warn('Native signInWithEmailLink failed, falling back to simulator:', err);
     }
   }
+
+  if (!SIMULATOR_ENABLED) throw simulatorUnavailable();
 
   const mockUser = {
     uid: `mock_email_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
@@ -190,11 +212,11 @@ export function onAuthStateChanged(
   };
 }
 
-export async function getIdToken(user: any): Promise<string> {
+export async function getIdToken(user: any): Promise<string | null> {
   if (user && typeof user.getIdToken === 'function') {
     return await user.getIdToken();
   }
-  return 'mock_customer_token';
+  return SIMULATOR_ENABLED ? 'mock_customer_token' : null;
 }
 
 /**

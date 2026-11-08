@@ -8,17 +8,17 @@ generator client {
 }
 
 model User {
-  id               Int            @id @default(autoincrement())
-  firebaseUid      String         @unique
-  email            String?        @unique
-  phone            String?        @unique
-  name             String?
-  venueName        String?
-  city             String?
-  contactPhone     String?
-  role             String         // CUSTOMER, ARTIST, ADMIN
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id           Int      @id @default(autoincrement())
+  firebaseUid  String   @unique
+  email        String?  @unique
+  phone        String?  @unique
+  name         String?
+  venueName    String?
+  city         String?
+  contactPhone String?
+  role         String // CUSTOMER, ARTIST, ADMIN
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   artistProfile    ArtistProfile?
   customerBookings Booking[]      @relation("CustomerBookings")
@@ -27,38 +27,40 @@ model User {
 }
 
 model ArtistProfile {
-  id                 Int                @id @default(autoincrement())
-  userId             Int                @unique
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   artistName         String
-  category           String             // Band, Solo Musician, Singer, Dancer, etc.
-  genres             String             // JSON string array of genres
-  location           String             // City (e.g., Hyderabad)
-  baseFee            Int                // In INR
+  category           String // Band, Solo Musician, Singer, Dancer, etc.
+  genres             String // JSON string array of genres
+  location           String // City (e.g., Hyderabad)
+  baseFee            Int // In INR
   bio                String?
-  requirements       String?            // Stage & Sound technical requirements
+  requirements       String? // Stage & Sound technical requirements
   youtubeUrl         String?
   instagramUrl       String?
-  verificationStatus String             @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  verificationStatus String   @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  availabilitySlots  AvailabilitySlot[]
-  bookings           Booking[]          @relation("ArtistBookings")
-  reviews            Review[]           @relation("ArtistReviews")
+  availabilitySlots AvailabilitySlot[]
+  bookings          Booking[]          @relation("ArtistBookings")
+  reviews           Review[]           @relation("ArtistReviews")
+
+  @@index([verificationStatus, createdAt])
 }
 
 model AvailabilitySlot {
   id        Int           @id @default(autoincrement())
   artistId  Int
   artist    ArtistProfile @relation(fields: [artistId], references: [id], onDelete: Cascade)
-  date      String        // YYYY-MM-DD
-  startTime String        // HH:mm
-  endTime   String        // HH:mm
+  date      String // YYYY-MM-DD
+  startTime String // HH:mm
+  endTime   String // HH:mm
   isBooked  Boolean       @default(false)
   createdAt DateTime      @default(now())
 
-  bookings  Booking[]
+  bookings Booking[]
 
   @@unique([artistId, date, startTime])
 }
@@ -75,12 +77,17 @@ model Booking {
   eventLocation String
   status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, EXPIRED, COMPLETED
   notes         String?
-  expiresAt     DateTime?        // REQUESTED offers auto-expire (and release the slot) after this instant
+  expiresAt     DateTime? // REQUESTED offers auto-expire (and release the slot) after this instant
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  messages      Message[]
-  review        Review?
+  messages Message[]
+  review   Review?
+
+  @@index([customerId, createdAt])
+  @@index([artistId, status])
+  @@index([slotId, status])
+  @@index([status, expiresAt])
 }
 
 model Message {
@@ -91,6 +98,8 @@ model Message {
   sender    User     @relation("UserSentMessages", fields: [senderId], references: [id])
   content   String
   createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
 }
 
 model Review {
@@ -101,8 +110,10 @@ model Review {
   artist     ArtistProfile @relation("ArtistReviews", fields: [artistId], references: [id], onDelete: Cascade)
   customerId Int
   customer   User          @relation("CustomerReviews", fields: [customerId], references: [id])
-  rating     Int           // 1 to 5 integer
+  rating     Int // 1 to 5 integer
   comment    String?
-  tags       String?       // JSON string array e.g. ["Punctual", "Great Sound"]
+  tags       String? // JSON string array e.g. ["Punctual", "Great Sound"]
   createdAt  DateTime      @default(now())
+
+  @@index([artistId, createdAt])
 }

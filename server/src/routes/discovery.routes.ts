@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
 import { BookingService } from '../services/booking.service';
+import { sendError, parseId, badRequest } from '../lib/http';
 
 const router = Router();
 
@@ -19,20 +20,28 @@ router.get('/', async (req: Request, res: Response) => {
     };
 
     if (location && typeof location === 'string') {
-      whereClause.location = { contains: location };
+      whereClause.location = { contains: location, mode: 'insensitive' };
     }
 
     if (category && typeof category === 'string') {
       whereClause.category = category;
     }
 
+    const parseFee = (value: unknown, name: string) => {
+      const fee = Number(value);
+      if (typeof value !== 'string' || value.trim() === '' || !Number.isFinite(fee) || fee < 0) {
+        throw badRequest(`${name} must be a non-negative number`);
+      }
+      return Math.floor(fee);
+    };
+
     if (minFee !== undefined || maxFee !== undefined) {
       whereClause.baseFee = {};
       if (minFee !== undefined) {
-        whereClause.baseFee.gte = parseInt(minFee as string, 10);
+        whereClause.baseFee.gte = parseFee(minFee, 'minFee');
       }
       if (maxFee !== undefined) {
-        whereClause.baseFee.lte = parseInt(maxFee as string, 10);
+        whereClause.baseFee.lte = parseFee(maxFee, 'maxFee');
       }
     }
 
@@ -50,9 +59,9 @@ router.get('/', async (req: Request, res: Response) => {
     if (search && typeof search === 'string') {
       andConditions.push({
         OR: [
-          { artistName: { contains: search } },
-          { genres: { contains: search } },
-          { bio: { contains: search } }
+          { artistName: { contains: search, mode: 'insensitive' } },
+          { genres: { contains: search, mode: 'insensitive' } },
+          { bio: { contains: search, mode: 'insensitive' } }
         ]
       });
     }
@@ -62,7 +71,7 @@ router.get('/', async (req: Request, res: Response) => {
       if (genreList.length > 0) {
         andConditions.push({
           OR: genreList.map(g => ({
-            genres: { contains: g }
+            genres: { contains: g, mode: 'insensitive' }
           }))
         });
       }
@@ -84,8 +93,8 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     res.status(200).json({ artists });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to search artists' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 
@@ -94,7 +103,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     await BookingService.expireStaleOffers();
 
-    const id = parseInt(req.params.id, 10);
+    const id = parseId(req.params.id, 'artist id');
     const artist = await prisma.artistProfile.findUnique({
       where: { id },
       include: {
@@ -111,8 +120,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     const { averageRating, reviewCount } = await ReviewService.getArtistRatingSummary(artist.id);
     res.status(200).json({ artist, averageRating, reviewCount });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to fetch artist profile' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 

@@ -1,3 +1,4 @@
+import { badRequest, forbidden, notFound } from '../lib/http';
 import { prisma } from '../lib/prisma';
 
 export interface CreateReviewInput {
@@ -21,11 +22,11 @@ export class ReviewService {
     });
 
     if (!booking) {
-      throw new Error('Booking not found');
+      throw notFound('Booking not found');
     }
 
     if (booking.customerId !== customerId) {
-      throw new Error('Not authorized: Only the customer who booked this show can review it');
+      throw forbidden('Not authorized: Only the customer who booked this show can review it');
     }
 
     if (booking.status !== 'COMPLETED') {
@@ -37,7 +38,7 @@ export class ReviewService {
     });
 
     if (existingReview) {
-      throw new Error('This booking has already been reviewed');
+      throw badRequest('This booking has already been reviewed');
     }
 
     const tagsJson = tags && tags.length > 0 ? JSON.stringify(tags) : null;

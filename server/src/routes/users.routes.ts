@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { BookingService } from '../services/booking.service';
 import { authenticate, AuthenticatedRequest } from '../middlewares/auth.middleware';
+import { sendError } from '../lib/http';
 
 const router = Router();
 
@@ -67,8 +68,8 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
         completedBookingsCount
       }
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Internal server error' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 
@@ -103,8 +104,8 @@ router.put('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
     });
 
     res.json({ user: updatedUser });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Internal server error' });
+  } catch (err) {
+    sendError(res, err, 500);
   }
 });
 

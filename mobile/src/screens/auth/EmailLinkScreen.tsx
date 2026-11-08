@@ -45,9 +45,13 @@ export const EmailLinkScreen: React.FC<EmailLinkScreenProps> = ({ onBack, onSucc
     };
 
     // Check cold launch URL
-    Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    });
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) handleDeepLink({ url });
+      })
+      .catch((err) => {
+        if (__DEV__) console.warn('Failed to read initial deep link URL:', err);
+      });
 
     // Check foreground/background URL event
     const subscription = Linking.addEventListener('url', handleDeepLink);

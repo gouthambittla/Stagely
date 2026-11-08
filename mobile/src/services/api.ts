@@ -2,7 +2,21 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { getAuth, getIdToken } from './firebase';
 
-function getApiBaseUrl(): string {
+const REQUEST_TIMEOUT_MS = 15000;
+
+export class ApiError extends Error {
+  status: number;
+  body?: unknown;
+
+  constructor(message: string, status: number, body?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function getDevFallbackUrl(): string {
   // If running in Expo Go or physical device connected to Metro, use the PC host IP
   const hostUri =
     Constants.expoConfig?.hostUri ||
@@ -16,9 +30,6 @@ function getApiBaseUrl(): string {
     }
   }
 
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
   // Android emulator loopback to host machine
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:5000/api';
@@ -27,9 +38,29 @@ function getApiBaseUrl(): string {
   return 'http://localhost:5000/api';
 }
 
+function getApiBaseUrl(): string {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    if (__DEV__ && !envUrl.startsWith('https://') && !/localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.|^http:\/\/10\./.test(envUrl)) {
+      console.warn(`[Stagely Config] EXPO_PUBLIC_API_URL is not https: ${envUrl}. Release builds must use https.`);
+    }
+    return envUrl.replace(/\/+$/, '');
+  }
+
+  if (__DEV__) {
+    return getDevFallbackUrl();
+  }
+
+  throw new Error(
+    '[Stagely Config] EXPO_PUBLIC_API_URL is not set. Release builds require an explicit https API URL (configure it in eas.json build profile env).'
+  );
+}
+
 const API_BASE_URL = getApiBaseUrl();
 
-console.log(`🌐 [Stagely Config] API_BASE_URL: ${API_BASE_URL} (Platform: ${Platform.OS})`);
+if (__DEV__) {
+  console.log(`[Stagely Config] API_BASE_URL: ${API_BASE_URL} (Platform: ${Platform.OS})`);
+}
 
 export async function getAuthToken(): Promise<string | null> {
   try {
@@ -40,7 +71,7 @@ export async function getAuthToken(): Promise<string | null> {
     }
     return null;
   } catch (err) {
-    console.warn('Failed to retrieve Firebase ID token:', err);
+    if (__DEV__) console.warn('Failed to retrieve Firebase ID token:', err);
     return null;
   }
 }
@@ -59,29 +90,65 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const startTime = Date.now();
-  let response: Response;
+
   try {
-    response = await fetch(url, {
-      ...options,
-      headers
-    });
-  } catch (err: any) {
-    const elapsed = Date.now() - startTime;
-    console.error(`❌ [API Network Failure] ${method} ${url} (${elapsed}ms):`, err?.message || err);
-    throw new Error(`Cannot connect to backend server at ${API_BASE_URL}. Ensure the backend is running and reachable on this device.`);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal
+      });
+    } catch (err: any) {
+      const elapsed = Date.now() - startTime;
+      if (err?.name === 'AbortError') {
+        if (__DEV__) console.warn(`[API Timeout] ${method} ${url} (${elapsed}ms)`);
+        throw new ApiError('The request timed out. Please check your connection and try again.', 0);
+      }
+      if (__DEV__) console.warn(`[API Network Failure] ${method} ${url} (${elapsed}ms):`, err?.message || err);
+      throw new ApiError(
+        __DEV__
+          ? `Cannot connect to backend server at ${API_BASE_URL}. Ensure the backend is running and reachable on this device.`
+          : 'Unable to reach Stagely servers. Please check your internet connection and try again.',
+        0
+      );
+    }
+
+    const duration = Date.now() - startTime;
+    let text = '';
+    try {
+      text = await response.text();
+    } catch {
+      text = '';
+    }
+
+    let data: any = undefined;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+
+    if (!response.ok) {
+      if (__DEV__) console.warn(`[API Error ${response.status}] ${method} ${url} (${duration}ms):`, data);
+      const message =
+        data && typeof data === 'object' && typeof data.error === 'string' && data.error
+          ? data.error
+          : `Request failed (${response.status})`;
+      throw new ApiError(message, response.status, data);
+    }
+
+    if (__DEV__) console.log(`[API Response ${response.status}] ${method} ${url} (${duration}ms):`, data);
+    // 204 / empty body: keep previous behaviour of returning an empty object
+    return (data === undefined ? {} : data) as T;
+  } finally {
+    clearTimeout(timer);
   }
-
-  const duration = Date.now() - startTime;
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    console.error(`⚠️ [API Error ${response.status}] ${method} ${url} (${duration}ms):`, data);
-    throw new Error(data.error || `Request failed with status ${response.status}`);
-  }
-
-  console.log(`✅ [API Response ${response.status}] ${method} ${url} (${duration}ms):`, data);
-  return data as T;
 }
 
 export interface ArtistFilterParams {
