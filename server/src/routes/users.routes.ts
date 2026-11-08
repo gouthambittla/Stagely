@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { BookingService } from '../services/booking.service';
 import { authenticate, AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -30,6 +31,9 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
       res.status(404).json({ error: 'User not found' });
       return;
     }
+
+    // Lapsed offers must not count as active bookings
+    await BookingService.expireStaleOffers();
 
     const todayStr = new Date().toISOString().split('T')[0];
 

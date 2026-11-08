@@ -73,8 +73,9 @@ model Booking {
   slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
   eventType     String
   eventLocation String
-  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, COMPLETED
+  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, EXPIRED, COMPLETED
   notes         String?
+  expiresAt     DateTime?        // REQUESTED offers auto-expire (and release the slot) after this instant
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 

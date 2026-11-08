@@ -56,7 +56,7 @@ router.put('/:id/respond', async (req: AuthenticatedRequest, res: Response) => {
     const booking = await BookingService.respondToBooking(bookingId, req.user!.id, action);
     res.status(200).json({ message: `Booking ${action.toLowerCase()}ed`, booking });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to respond to booking' });
+    res.status(err.statusCode || 400).json({ error: err.message || 'Failed to respond to booking' });
   }
 });
 

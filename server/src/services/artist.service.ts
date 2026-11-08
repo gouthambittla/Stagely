@@ -1,3 +1,4 @@
+import { BookingService } from './booking.service';
 import { ReviewService } from './review.service';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
@@ -132,6 +133,9 @@ export class ArtistService {
   }
 
   static async getArtistStats(artistId: number) {
+    // Lapsed offers must not inflate the pending-requests count
+    await BookingService.expireStaleOffers();
+
     const todayStr = new Date().toISOString().split('T')[0];
 
     const completedGigsCount = await prisma.booking.count({

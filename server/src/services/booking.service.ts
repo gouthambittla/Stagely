@@ -10,8 +10,73 @@ export interface CreateBookingInput {
   notes?: string;
 }
 
+/** How long an artist has to answer a booking request before it lapses and the night reopens. */
+export const OFFER_TTL_HOURS = 48;
+const HOUR_MS = 60 * 60 * 1000;
+/** Slots are stored as local wall-clock date/time; the marketplace operates in IST. */
+const MARKET_UTC_OFFSET = '+05:30';
+
+/**
+ * An offer lapses after OFFER_TTL_HOURS, or at the event start if that comes first
+ * (an artist can't usefully accept a gig that has already begun).
+ */
+export function computeOfferExpiry(slot: { date: string; startTime: string }, now: Date = new Date()): Date {
+  const ttlExpiry = new Date(now.getTime() + OFFER_TTL_HOURS * HOUR_MS);
+  const eventStart = new Date(`${slot.date}T${slot.startTime}:00${MARKET_UTC_OFFSET}`);
+  if (!isNaN(eventStart.getTime()) && eventStart > now && eventStart < ttlExpiry) {
+    return eventStart;
+  }
+  return ttlExpiry;
+}
+
 export class BookingService {
+  /**
+   * Marks lapsed REQUESTED offers as EXPIRED and releases their slots so the night
+   * becomes bookable again. Safe to call often (lazily on reads/writes and from a sweep).
+   * Returns the number of offers expired.
+   */
+  static async expireStaleOffers(now: Date = new Date()): Promise<number> {
+    const legacyCutoff = new Date(now.getTime() - OFFER_TTL_HOURS * HOUR_MS);
+
+    return prisma.$transaction(async (tx) => {
+      const stale = await tx.booking.findMany({
+        where: {
+          status: BookingStatus.REQUESTED,
+          OR: [
+            { expiresAt: { lte: now } },
+            // Requests created before expiresAt existed fall back to createdAt + TTL
+            { expiresAt: null, createdAt: { lte: legacyCutoff } }
+          ]
+        },
+        select: { id: true, slotId: true }
+      });
+      if (stale.length === 0) return 0;
+
+      // Guard on status so a concurrent accept/decline is never overwritten
+      const { count } = await tx.booking.updateMany({
+        where: { id: { in: stale.map((b) => b.id) }, status: BookingStatus.REQUESTED },
+        data: { status: BookingStatus.EXPIRED }
+      });
+
+      // Release each slot unless some other active booking still holds it
+      const slotIds = [...new Set(stale.map((b) => b.slotId))];
+      for (const slotId of slotIds) {
+        const stillHeld = await tx.booking.findFirst({
+          where: { slotId, status: { in: [BookingStatus.REQUESTED, BookingStatus.ACCEPTED] } }
+        });
+        if (!stillHeld) {
+          await tx.availabilitySlot.update({ where: { id: slotId }, data: { isBooked: false } });
+        }
+      }
+
+      return count;
+    });
+  }
+
   static async createBooking(input: CreateBookingInput) {
+    // Lapsed offers must not keep holding the night
+    await BookingService.expireStaleOffers();
+
     return prisma.$transaction(async (tx) => {
       // 1. Verify artist exists and is verified
       const artist = await tx.artistProfile.findUnique({
@@ -62,7 +127,8 @@ export class BookingService {
           eventType: input.eventType,
           eventLocation: input.eventLocation,
           notes: input.notes,
-          status: BookingStatus.REQUESTED
+          status: BookingStatus.REQUESTED,
+          expiresAt: computeOfferExpiry(slot)
         },
         include: {
           artist: true,
@@ -82,6 +148,8 @@ export class BookingService {
   }
 
   static async respondToBooking(bookingId: number, artistUserId: number, action: 'ACCEPT' | 'DECLINED') {
+    await BookingService.expireStaleOffers();
+
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: { artist: true }
@@ -95,6 +163,12 @@ export class BookingService {
       throw new Error('Unauthorized to respond to this booking');
     }
 
+    if (booking.status === BookingStatus.EXPIRED) {
+      const err: any = new Error('This offer has expired and can no longer be accepted or declined');
+      err.statusCode = 409;
+      throw err;
+    }
+
     if (booking.status !== BookingStatus.REQUESTED) {
       throw new Error(`Cannot respond to a booking with status ${booking.status}`);
     }
@@ -103,9 +177,18 @@ export class BookingService {
 
     // Transaction: update booking status and lock or release the slot
     const result = await prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.booking.update({
+      // Only transition if the offer is still open (it may have just expired or been answered)
+      const { count } = await tx.booking.updateMany({
+        where: { id: bookingId, status: BookingStatus.REQUESTED },
+        data: { status: newStatus }
+      });
+      if (count === 0) {
+        const err: any = new Error('This offer is no longer open (it may have expired or already been answered)');
+        err.statusCode = 409;
+        throw err;
+      }
+      const updatedBooking = await tx.booking.findUniqueOrThrow({
         where: { id: bookingId },
-        data: { status: newStatus },
         include: { slot: true, artist: true, customer: { select: { id: true, email: true } } }
       });
 
@@ -182,6 +265,8 @@ export class BookingService {
   }
 
   static async getBookingsForUser(userId: number, role: UserRole) {
+    await BookingService.expireStaleOffers();
+
     if (role === UserRole.CUSTOMER) {
       return prisma.booking.findMany({
         where: { customerId: userId },

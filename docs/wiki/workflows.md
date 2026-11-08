@@ -78,10 +78,12 @@
         Artist Review in Dashboard
           ├── Accept  ──▶ [Status: ACCEPTED] (Slot remains permanently locked)
           └── Decline ──▶ [Status: DECLINED] (Slot unlocked: isBooked = false; reopens for new offers)
+          └── No answer by expiresAt ──▶ [Status: EXPIRED] (Slot unlocked automatically; reopens for new offers)
 ```
 - **Single Exclusive Offer Guarantee**: An artist can receive at most ONE active gig offer for any given date. Competing requests on the same date are rejected with `409 Conflict`.
 - **Atomic Lock on Request**: As soon as a venue submits a request, the slot is locked (`isBooked = true`) and hidden from other venues in the catalog.
 - **Auto-Release on Decline**: If the artist declines the request, the slot is atomically released (`isBooked = false`) so other venues can discover and book it.
+- **Auto-Expiry of Unanswered Offers**: Every request is stamped with `expiresAt` = 48 hours after the request, or the event start (IST) if sooner. Once it passes, the offer becomes `EXPIRED`, the slot is released, and the artist can no longer accept it (`409`). Expiry runs lazily before booking reads/writes, artist discovery, and dashboard stats, plus a 5-minute background sweep in the server process. Legacy requests without `expiresAt` expire 48 hours after `createdAt`.
 - A dedicated chat thread is created when a booking enters `REQUESTED` so the customer and artist can converse regarding set times, sound setup, and logistics.
 
 ---
