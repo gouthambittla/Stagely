@@ -101,7 +101,35 @@
 
 ---
 
-## 6. Running & Verifying the Application
+
+---
+
+## 6. Verified Reviews & Reputation Lifecycle
+```
+[Gig Marked COMPLETED]
+         │
+         ▼
+[Customer Opens MyBookingsScreen]
+         │
+         ├── Sees "★ Rate & Review Show" Button
+         │
+         ├── Opens Review Modal:
+         │     ├── Selects 1–5 Star Rating (interactive)
+         │     ├── Chooses Stage & Sound Highlights (e.g. "Crystal-Clear Audio", "Punctual Soundcheck")
+         │     └── Inputs Qualitative Review Notes
+         │
+         ├── Submits (POST /api/bookings/:id/review)
+         │     ├── Server verifies booking is COMPLETED and customer is authorized
+         │     └── Review is locked 1:1 to bookingId
+         │
+         └── Dynamic Reputation Reflection:
+               ├── ArtistDetailScreen: Average rating star badge + verified review cards
+               └── ArtistStudioScreen: Shows live rating average & total review count
+```
+
+---
+
+## 7. Running & Verifying the Application
 
 ### 6.1 Backend Server (`server/`)
 ```bash
@@ -139,8 +167,10 @@ npx expo start
 
 ---
 
-## 7. Verification Evidence
-All core journeys are verified via automated Jest tests (12 suites, 44 tests passing 100%):
+## 8. Verification Evidence
+All core journeys are verified via automated Jest tests (14 suites, 56 tests passing 100%):
+- `tests/reviews.test.ts`: Verified review submission, 1–5 star validation, customer ownership check, duplicate prevention, and artist rating aggregation.
+- `tests/e2e_reviews.test.ts`: End-to-end multi-venue gig completion, rating updates, public discovery rating reflection, and studio profile rating sync.
 - `tests/scaffold.test.ts`: Enums and domain type parity.
 - `tests/db.test.ts`: Prisma models, foreign key constraints, customer venue fields, 15-day slot cascades.
 - `tests/auth_and_onboarding.test.ts`: Firebase token verification, profile creation, initial `PENDING_VERIFICATION` enforcement.

@@ -23,6 +23,7 @@ model User {
   artistProfile    ArtistProfile?
   customerBookings Booking[]      @relation("CustomerBookings")
   sentMessages     Message[]      @relation("UserSentMessages")
+  reviews          Review[]       @relation("CustomerReviews")
 }
 
 model ArtistProfile {
@@ -44,6 +45,7 @@ model ArtistProfile {
 
   availabilitySlots  AvailabilitySlot[]
   bookings           Booking[]          @relation("ArtistBookings")
+  reviews            Review[]           @relation("ArtistReviews")
 }
 
 model AvailabilitySlot {
@@ -77,6 +79,7 @@ model Booking {
   updatedAt     DateTime         @updatedAt
 
   messages      Message[]
+  review        Review?
 }
 
 model Message {
@@ -87,4 +90,18 @@ model Message {
   sender    User     @relation("UserSentMessages", fields: [senderId], references: [id])
   content   String
   createdAt DateTime @default(now())
+}
+
+model Review {
+  id         Int           @id @default(autoincrement())
+  bookingId  Int           @unique
+  booking    Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  artistId   Int
+  artist     ArtistProfile @relation("ArtistReviews", fields: [artistId], references: [id], onDelete: Cascade)
+  customerId Int
+  customer   User          @relation("CustomerReviews", fields: [customerId], references: [id])
+  rating     Int           // 1 to 5 integer
+  comment    String?
+  tags       String?       // JSON string array e.g. ["Punctual", "Great Sound"]
+  createdAt  DateTime      @default(now())
 }

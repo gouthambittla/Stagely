@@ -25,6 +25,13 @@ describe('Discovery & Booking Flow', () => {
     expect(artist).toBeDefined();
     verifiedArtistId = artist!.id;
 
+    // Reset artist's slots and clean previous test bookings
+    await prisma.booking.deleteMany({ where: { artistId: verifiedArtistId } });
+    await prisma.availabilitySlot.updateMany({
+      where: { artistId: verifiedArtistId },
+      data: { isBooked: false }
+    });
+
     let slot = artist!.availabilitySlots.find((s) => !s.isBooked);
     if (!slot) {
       slot = await prisma.availabilitySlot.create({

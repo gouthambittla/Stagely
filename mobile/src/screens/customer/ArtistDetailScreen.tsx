@@ -19,6 +19,7 @@ import {
   Calendar,
   Clock,
   Sparkles,
+  Star,
   Youtube,
   Instagram,
   Mic2,
@@ -43,6 +44,29 @@ export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
   const [eventType, setEventType] = useState<string>('Pub Live Band');
   const [eventLocation, setEventLocation] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [averageRating, setAverageRating] = useState<number | null>(artist.averageRating ?? null);
+  const [reviewCount, setReviewCount] = useState<number>(artist.reviewCount ?? 0);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(true);
+
+  useEffect(() => {
+    api.getArtistReviews(artist.id)
+      .then(res => {
+        setReviews(res.reviews || []);
+        if (res.averageRating !== null && res.averageRating !== undefined) {
+          setAverageRating(res.averageRating);
+        }
+        if (res.reviewCount !== undefined) {
+          setReviewCount(res.reviewCount);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load artist reviews:', err);
+      })
+      .finally(() => {
+        setLoadingReviews(false);
+      });
+  }, [artist.id]);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
@@ -206,6 +230,70 @@ export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
             </View>
           </View>
         )}
+
+        {/* Verified Stage Reviews */}
+        <View style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Star size={16} color="#F5A623" fill="#F5A623" />
+            <Text style={styles.sectionTitle}>
+              Verified Stage Reviews {reviewCount > 0 ? `(${reviewCount})` : ''}
+            </Text>
+          </View>
+
+          {loadingReviews ? (
+            <ActivityIndicator size="small" color="#F5A623" style={{ marginVertical: 12 }} />
+          ) : reviews.length === 0 ? (
+            <View style={styles.emptyReviewsCard}>
+              <Text style={styles.emptyReviewsTitle}>No Stage Reviews Yet</Text>
+              <Text style={styles.emptyReviewsText}>
+                Be the first venue or event host to book and review this artist!
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.reviewsList}>
+              {reviews.map(r => {
+                const tags: string[] = typeof r.tags === 'string' ? JSON.parse(r.tags) : r.tags || [];
+                return (
+                  <View key={r.id} style={styles.reviewCard}>
+                    <View style={styles.reviewCardHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.reviewerName}>
+                          {r.customer?.name || 'Event Host'}
+                          {r.customer?.venueName ? ` • ${r.customer.venueName}` : ''}
+                        </Text>
+                        {r.customer?.city ? (
+                          <Text style={styles.reviewerCity}>{r.customer.city}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.reviewStarsRow}>
+                        {[1, 2, 3, 4, 5].map(starNum => (
+                          <Star
+                            key={starNum}
+                            size={12}
+                            color={starNum <= r.rating ? '#F5A623' : '#334155'}
+                            fill={starNum <= r.rating ? '#F5A623' : 'transparent'}
+                          />
+                        ))}
+                      </View>
+                    </View>
+
+                    {r.comment ? <Text style={styles.reviewComment}>"{r.comment}"</Text> : null}
+
+                    {tags.length > 0 && (
+                      <View style={styles.reviewTagsRow}>
+                        {tags.map((t, tidx) => (
+                          <View key={tidx} style={styles.reviewTagBadge}>
+                            <Text style={styles.reviewTagBadgeText}>{t}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
 
         {/* 15-Day Rolling Availability Calendar */}
         <View style={styles.section}>
@@ -642,6 +730,99 @@ const styles = StyleSheet.create({
     color: '#0B0D13',
     fontSize: 15,
     fontWeight: '700'
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#3B270C',
+    borderColor: '#F5A623',
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  ratingBadgeText: {
+    color: '#F5A623',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  reviewsList: {
+    gap: 12,
+    marginTop: 8
+  },
+  reviewCard: {
+    backgroundColor: '#131722',
+    borderColor: '#1E293B',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    gap: 10
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10
+  },
+  reviewerName: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  reviewerCity: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2
+  },
+  reviewStarsRow: {
+    flexDirection: 'row',
+    gap: 2
+  },
+  reviewComment: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 18
+  },
+  reviewTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6
+  },
+  reviewTagBadge: {
+    backgroundColor: '#0B0D13',
+    borderColor: '#334155',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  reviewTagBadgeText: {
+    color: '#F5A623',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  emptyReviewsCard: {
+    backgroundColor: '#131722',
+    borderColor: '#1E293B',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8
+  },
+  emptyReviewsTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  emptyReviewsText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    textAlign: 'center'
   }
 });
 

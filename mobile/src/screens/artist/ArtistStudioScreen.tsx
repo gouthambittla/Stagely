@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api, ArtistStudioProfileResponse } from '../../services/api';
 import {
   Music,
+  Star,
   CheckCircle,
   Clock,
   Calendar,

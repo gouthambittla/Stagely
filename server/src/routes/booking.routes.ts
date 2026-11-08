@@ -1,3 +1,4 @@
+import { ReviewService } from '../services/review.service';
 import { Router, Response } from 'express';
 import { BookingService } from '../services/booking.service';
 import { authenticate, AuthenticatedRequest } from '../middlewares/auth.middleware';
@@ -83,6 +84,33 @@ router.get('/:id/messages', async (req: AuthenticatedRequest, res: Response) => 
     res.status(200).json({ messages });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to fetch messages' });
+  }
+});
+
+
+// POST /api/bookings/:id/review - Customer reviews completed gig
+router.post('/:id/review', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseInt(req.params.id, 10);
+    const { rating, comment, tags } = req.body;
+
+    if (rating === undefined || rating === null) {
+      res.status(400).json({ error: 'rating is required' });
+      return;
+    }
+
+    const review = await ReviewService.createReview({
+      bookingId,
+      customerId: req.user!.id,
+      rating: Number(rating),
+      comment,
+      tags
+    });
+
+    res.status(201).json({ message: 'Review submitted successfully', review });
+  } catch (err: any) {
+    const status = err.message.includes('Not authorized') ? 403 : 400;
+    res.status(status).json({ error: err.message || 'Failed to submit review' });
   }
 });
 

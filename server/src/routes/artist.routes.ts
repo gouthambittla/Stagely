@@ -1,3 +1,4 @@
+import { ReviewService } from '../services/review.service';
 import { Router, Response } from 'express';
 import { ArtistService } from '../services/artist.service';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middlewares/auth.middleware';
@@ -103,6 +104,18 @@ router.put('/my-profile', authenticate, requireRole([UserRole.ARTIST]), async (r
     res.status(200).json({ profile: updatedProfile, stats });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to update artist profile' });
+  }
+});
+
+
+// GET /api/artists/:id/reviews - Publicly fetch verified artist reviews
+router.get('/:id/reviews', async (req, res: Response) => {
+  try {
+    const artistId = parseInt(req.params.id, 10);
+    const data = await ReviewService.getArtistReviews(artistId);
+    res.status(200).json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch artist reviews' });
   }
 });
 
