@@ -41,7 +41,7 @@ interface ArtistStudioScreenProps {
 }
 
 export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManageSchedule }) => {
-  const { logout } = useAuth();
+  const { logout, refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -93,6 +93,7 @@ export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManage
   const onRefresh = () => {
     setRefreshing(true);
     fetchStudio();
+    refreshUser().catch(() => {});
   };
 
   const handleSave = async () => {
@@ -109,13 +110,17 @@ export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManage
         category: formCategory || undefined,
         baseFee: feeNum,
         genres: formGenres,
-        bio: formBio.trim() || undefined,
-        requirements: formRequirements.trim() || undefined,
-        youtubeUrl: formYoutubeUrl.trim() || undefined,
-        instagramUrl: formInstagramUrl.trim() || undefined
+        // Send '' (not undefined) so clearing a field actually clears it on the server
+        bio: formBio.trim(),
+        requirements: formRequirements.trim(),
+        youtubeUrl: formYoutubeUrl.trim(),
+        instagramUrl: formInstagramUrl.trim()
       });
 
       setStudioData(res);
+      // The dashboard and schedule read the profile from the auth session; refresh it so they
+      // show the saved changes too (otherwise they stay stale until the next login).
+      refreshUser().catch(() => {});
       setIsEditing(false);
       Alert.alert('Studio Updated', 'Your stage portfolio and live rider changes are now live.');
     } catch (err: any) {

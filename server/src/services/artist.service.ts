@@ -9,10 +9,10 @@ export interface OnboardArtistInput {
   genres: string[];
   location: string;
   baseFee: number;
-  bio?: string;
-  requirements?: string;
-  youtubeUrl?: string;
-  instagramUrl?: string;
+  bio?: string | null;
+  requirements?: string | null;
+  youtubeUrl?: string | null;
+  instagramUrl?: string | null;
   availableSlots?: Array<{
     date: string;
     startTime: string;
@@ -26,10 +26,10 @@ export interface UpdateArtistInput {
   genres?: string[];
   location?: string;
   baseFee?: number;
-  bio?: string;
-  requirements?: string;
-  youtubeUrl?: string;
-  instagramUrl?: string;
+  bio?: string | null;
+  requirements?: string | null;
+  youtubeUrl?: string | null;
+  instagramUrl?: string | null;
 }
 
 export class ArtistService {
