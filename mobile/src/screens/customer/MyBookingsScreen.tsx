@@ -58,6 +58,10 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ onOpenChat, 
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<boolean>(false);
 
+  // Mark-as-completed state
+  const [completingId, setCompletingId] = useState<number | null>(null);
+  const [completeError, setCompleteError] = useState<{ id: number; message: string } | null>(null);
+
   const fetchBookings = async () => {
     setError(null);
     try {
@@ -100,6 +104,30 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ onOpenChat, 
     setReviewError(null);
     setReviewSuccess(false);
     setReviewModalVisible(true);
+  };
+
+  /** The gig has ended (server stamps eventEndsAt), so the booker can confirm it happened. */
+  const canMarkCompleted = (booking: any) =>
+    booking.status === 'ACCEPTED' &&
+    Boolean(booking.eventEndsAt) &&
+    new Date(booking.eventEndsAt).getTime() <= Date.now();
+
+  const markCompleted = async (booking: any) => {
+    setCompletingId(booking.id);
+    setCompleteError(null);
+    try {
+      const res = await api.completeBooking(booking.id);
+      const updated = { ...booking, ...res.booking };
+      setBookings(prev => prev.map(b => (b.id === booking.id ? updated : b)));
+      // Go straight to the (optional) review
+      openReviewModal(updated);
+    } catch (err: any) {
+      setCompleteError({ id: booking.id, message: err.message || 'Could not mark as completed' });
+      // The booking may have auto-completed meanwhile; refresh to show its real state
+      fetchBookings();
+    } finally {
+      setCompletingId(null);
+    }
   };
 
   const toggleTag = (tag: string) => {
@@ -196,6 +224,32 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ onOpenChat, 
             </Text>
           </View>
         </View>
+
+        {canMarkCompleted(item) && (
+          <View style={styles.reviewSection}>
+            <TouchableOpacity
+              style={[styles.completeButton, completingId === item.id && styles.btnDisabled]}
+              onPress={() => markCompleted(item)}
+              disabled={completingId === item.id}
+              activeOpacity={0.85}
+            >
+              {completingId === item.id ? (
+                <ActivityIndicator size="small" color="#0B0D13" />
+              ) : (
+                <>
+                  <CheckCircle2 size={16} color="#0B0D13" />
+                  <Text style={styles.completeButtonText}>Mark as Completed</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.completeHint}>
+              Did the show happen? Confirm it here. It completes automatically 48 hours after the event.
+            </Text>
+            {completeError && completeError.id === item.id ? (
+              <Text style={styles.completeErrorText}>{completeError.message}</Text>
+            ) : null}
+          </View>
+        )}
 
         {/* Verified Review Section for Completed Gigs */}
         {isCompleted && (
@@ -519,6 +573,32 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     borderRadius: 10
+  },
+  completeButton: {
+    backgroundColor: '#34D399',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10
+  },
+  completeButtonText: {
+    color: '#0B0D13',
+    fontWeight: '700',
+    fontSize: 14
+  },
+  completeHint: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: 'center'
+  },
+  completeErrorText: {
+    color: '#F87171',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center'
   },
   leaveReviewButtonText: {
     color: '#0B0D13',

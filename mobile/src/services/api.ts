@@ -296,6 +296,8 @@ export const api = {
   getBookings: () => request<{ bookings: any[] }>('/bookings'),
   respondToBooking: (id: number, action: 'ACCEPT' | 'DECLINED') =>
     request<any>(`/bookings/${id}/respond`, { method: 'PUT', body: JSON.stringify({ action }) }),
+  completeBooking: (bookingId: number) =>
+    request<{ message: string; booking: any }>(`/bookings/${bookingId}/complete`, { method: 'POST' }),
   getMessages: (bookingId: number) => request<{ messages: any[] }>(`/bookings/${bookingId}/messages`),
   sendMessage: (bookingId: number, content: string) =>
     request<any>(`/bookings/${bookingId}/messages`, { method: 'POST', body: JSON.stringify({ content }) }),

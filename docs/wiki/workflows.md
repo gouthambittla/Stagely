@@ -118,6 +118,9 @@
 ## 6. Verified Reviews & Reputation Lifecycle
 ```
 [Gig Marked COMPLETED]
+   ├── Booker taps "Mark as Completed" after the event ends (POST /api/bookings/:id/complete)
+   └── or, if the booker does nothing, it completes 48h after the event ends
+       (5-minute sweep in src/index.ts + lazily on GET /api/bookings)
          │
          ▼
 [Customer Opens MyBookingsScreen]
@@ -180,6 +183,7 @@ npx expo start
 
 ## 8. Verification Evidence
 All core journeys are verified via automated Jest tests (14 suites, 56 tests passing 100%):
+- `tests/booking_completion.test.ts`: Event end time (IST, overnight gigs), booker-only completion after the event, double-completion refusal, and 48h auto-completion (sweep and lazy).
 - `tests/reviews.test.ts`: Verified review submission, 1–5 star validation, customer ownership check, duplicate prevention, and artist rating aggregation.
 - `tests/e2e_reviews.test.ts`: End-to-end multi-venue gig completion, rating updates, public discovery rating reflection, and studio profile rating sync.
 - `tests/scaffold.test.ts`: Enums and domain type parity.
