@@ -1,6 +1,7 @@
 import { ReviewService } from '../services/review.service';
 import { Router, Response } from 'express';
 import { BookingService } from '../services/booking.service';
+import { PaymentService } from '../services/payment.service';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { UserRole } from '../types';
 
@@ -59,6 +60,17 @@ router.put('/:id/respond', async (req: AuthenticatedRequest, res: Response) => {
 
     const booking = await BookingService.respondToBooking(bookingId, req.user!.id, action);
     res.status(200).json({ message: `Booking ${action.toLowerCase()}ed`, booking });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+// POST /api/bookings/:id/pay - Booker starts (or resumes) checkout for an accepted booking
+router.post('/:id/pay', requireRole([UserRole.CUSTOMER]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseId(req.params.id, 'booking id');
+    const checkout = await PaymentService.startCheckout(bookingId, req.user!.id);
+    res.status(200).json(checkout);
   } catch (err) {
     sendError(res, err, 400);
   }

@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma';
-import { BookingStatus, VerificationStatus, UserRole } from '../types';
+import { BookingStatus, VerificationStatus, UserRole, NIGHT_HOLDING_STATUSES } from '../types';
+import { paymentsConfig } from '../config/payments';
+import { Prisma } from '@prisma/client';
 import { conflict, forbidden, notFound } from '../lib/http';
 
 export interface CreateBookingInput {
@@ -34,7 +36,32 @@ export function computeOfferExpiry(slot: { date: string; startTime: string }, no
  * After a gig ends the booker has this long to mark it completed (or, once payments land,
  * report a problem). After that it completes on its own, so silence never blocks the artist.
  */
-export const AUTO_COMPLETE_AFTER_HOURS = 48;
+export const AUTO_COMPLETE_AFTER_HOURS = paymentsConfig().disputeWindowHours;
+
+/**
+ * Once the artist accepts, the booker has PAYMENT_WINDOW_HOURS to pay, but never past the
+ * event start (an unpaid gig must not go ahead).
+ */
+export function computePaymentDue(slot: { date: string; startTime: string }, now: Date = new Date()): Date {
+  const windowEnd = new Date(now.getTime() + paymentsConfig().paymentWindowHours * HOUR_MS);
+  const eventStart = new Date(`${slot.date}T${slot.startTime}:00${MARKET_UTC_OFFSET}`);
+  if (!isNaN(eventStart.getTime()) && eventStart < windowEnd) {
+    return eventStart;
+  }
+  return windowEnd;
+}
+
+/** Frees each slot's night unless some other live booking still holds it. */
+async function releaseSlotsIfFree(tx: Prisma.TransactionClient, slotIds: number[]): Promise<void> {
+  for (const slotId of [...new Set(slotIds)]) {
+    const stillHeld = await tx.booking.findFirst({
+      where: { slotId, status: { in: NIGHT_HOLDING_STATUSES } }
+    });
+    if (!stillHeld) {
+      await tx.availabilitySlot.update({ where: { id: slotId }, data: { isBooked: false } });
+    }
+  }
+}
 
 /**
  * When the gig finishes: the slot's date + endTime, read as IST. A slot whose end time is not
@@ -78,23 +105,39 @@ export class BookingService {
       });
 
       // Release each slot unless some other active booking still holds it
-      const slotIds = [...new Set(stale.map((b) => b.slotId))];
-      for (const slotId of slotIds) {
-        const stillHeld = await tx.booking.findFirst({
-          where: { slotId, status: { in: [BookingStatus.REQUESTED, BookingStatus.ACCEPTED] } }
-        });
-        if (!stillHeld) {
-          await tx.availabilitySlot.update({ where: { id: slotId }, data: { isBooked: false } });
-        }
-      }
+      await releaseSlotsIfFree(tx, stale.map((b) => b.slotId));
 
       return count;
     });
   }
 
+  /**
+   * Marks AWAITING_PAYMENT bookings past their payment deadline as PAYMENT_EXPIRED and
+   * releases their nights. No money has moved, so nothing to refund. Safe to call often.
+   */
+  static async expireUnpaidBookings(now: Date = new Date()): Promise<number> {
+    return prisma.$transaction(async (tx) => {
+      const unpaid = await tx.booking.findMany({
+        where: { status: BookingStatus.AWAITING_PAYMENT, paymentDueAt: { lte: now } },
+        select: { id: true, slotId: true }
+      });
+      if (unpaid.length === 0) return 0;
+
+      // Guard on status so a payment confirmed at the last moment is never overwritten
+      const { count } = await tx.booking.updateMany({
+        where: { id: { in: unpaid.map((b) => b.id) }, status: BookingStatus.AWAITING_PAYMENT },
+        data: { status: BookingStatus.PAYMENT_EXPIRED }
+      });
+
+      await releaseSlotsIfFree(tx, unpaid.map((b) => b.slotId));
+      return count;
+    });
+  }
+
   static async createBooking(input: CreateBookingInput) {
-    // Lapsed offers must not keep holding the night
+    // Lapsed offers and unpaid acceptances must not keep holding the night
     await BookingService.expireStaleOffers();
+    await BookingService.expireUnpaidBookings();
 
     return prisma.$transaction(async (tx) => {
       // 1. Verify artist exists and is verified
@@ -134,12 +177,12 @@ export class BookingService {
       }
 
       // 3. Strict Single-Offer / Night Collision Check:
-      // Ensure artist has NO other active booking (REQUESTED or ACCEPTED) on the same date
+      // Ensure artist has NO other live booking (requested, accepted, paid...) on the same date
       const activeBookingOnDate = await tx.booking.findFirst({
         where: {
           artistId: input.artistId,
           slot: { date: slot.date },
-          status: { in: [BookingStatus.REQUESTED, BookingStatus.ACCEPTED] }
+          status: { in: NIGHT_HOLDING_STATUSES }
         }
       });
       if (activeBookingOnDate) {
@@ -159,7 +202,9 @@ export class BookingService {
           notes: input.notes,
           status: BookingStatus.REQUESTED,
           expiresAt: computeOfferExpiry(slot),
-          eventEndsAt: computeEventEnd(slot)
+          eventEndsAt: computeEventEnd(slot),
+          // Lock in today's fee; later fee edits don't change an existing booking
+          amountPaise: artist.baseFee * 100
         },
         include: {
           artist: true,
@@ -189,7 +234,7 @@ export class BookingService {
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { artist: true }
+      include: { artist: true, slot: true }
     });
 
     if (!booking) {
@@ -210,14 +255,23 @@ export class BookingService {
       throw new Error(`Cannot respond to a booking with status ${booking.status}`);
     }
 
-    const newStatus = action === 'ACCEPT' ? BookingStatus.ACCEPTED : BookingStatus.DECLINED;
+    // With payments on, an accepted booking waits for the booker to pay; otherwise it's
+    // settled offline as before.
+    const paymentsOn = paymentsConfig().enabled;
+    const newStatus =
+      action === 'ACCEPT'
+        ? paymentsOn
+          ? BookingStatus.AWAITING_PAYMENT
+          : BookingStatus.ACCEPTED
+        : BookingStatus.DECLINED;
+    const paymentDueAt = newStatus === BookingStatus.AWAITING_PAYMENT ? computePaymentDue(booking.slot) : null;
 
     // Transaction: update booking status and lock or release the slot
     const result = await prisma.$transaction(async (tx) => {
       // Only transition if the offer is still open (it may have just expired or been answered)
       const { count } = await tx.booking.updateMany({
         where: { id: bookingId, status: BookingStatus.REQUESTED },
-        data: { status: newStatus }
+        data: { status: newStatus, paymentDueAt }
       });
       if (count === 0) {
         const err: any = new Error('This offer is no longer open (it may have expired or already been answered)');
@@ -348,6 +402,7 @@ export class BookingService {
 
   static async getBookingsForUser(userId: number, role: UserRole) {
     await BookingService.expireStaleOffers();
+    await BookingService.expireUnpaidBookings();
     await BookingService.autoCompleteFinishedBookings();
 
     if (role === UserRole.CUSTOMER) {

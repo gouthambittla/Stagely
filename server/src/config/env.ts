@@ -11,7 +11,17 @@ const EnvSchema = z
     FIREBASE_PROJECT_ID: z.string().optional(),
     ALLOW_MOCK_AUTH: z.enum(['true', 'false']).optional(),
     CORS_ORIGINS: z.string().optional(),
-    TRUST_PROXY: z.coerce.number().int().min(0).optional()
+    TRUST_PROXY: z.coerce.number().int().min(0).optional(),
+
+    // Payments (Razorpay Route). See src/config/payments.ts for defaults.
+    PAYMENTS_ENABLED: z.enum(['true', 'false']).optional(),
+    RAZORPAY_KEY_ID: z.string().optional(),
+    RAZORPAY_KEY_SECRET: z.string().optional(),
+    RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+    PLATFORM_FEE_PERCENT: z.coerce.number().min(0).max(99).optional(),
+    PAYMENT_WINDOW_HOURS: z.coerce.number().positive().optional(),
+    DISPUTE_WINDOW_HOURS: z.coerce.number().positive().optional(),
+    PUBLIC_BASE_URL: z.string().url().optional()
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production') {
@@ -24,6 +34,13 @@ const EnvSchema = z
           path: ['FIREBASE_SERVICE_ACCOUNT'],
           message: 'FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID is required in production'
         });
+      }
+      if (env.PAYMENTS_ENABLED === 'true') {
+        for (const key of ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'PUBLIC_BASE_URL'] as const) {
+          if (!env[key]) {
+            ctx.addIssue({ code: 'custom', path: [key], message: 'is required in production when PAYMENTS_ENABLED=true' });
+          }
+        }
       }
     }
   });

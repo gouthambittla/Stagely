@@ -288,22 +288,25 @@ Each phase is a separate PR, test-driven (failing test first), and keeps `npm te
 - [x] Mobile: a **Mark as completed** button on `MyBookingsScreen` after the event, which goes straight to the review screen.
 
 ### Phase 2: Payment core and fake gateway (server)
-- [ ] Add the `razorpay` dependency, the `PaymentGateway` interface, and the fake and Razorpay adapters.
-- [ ] Migration: `Payment`, `PaymentEvent`, the new booking fields, and the new statuses in `types/index.ts`.
-- [ ] `src/config/payments.ts`: fee %, windows and cancellation rules. Extend `env.ts` validation.
-- [ ] `createBooking` stores `amountPaise`. `respond ACCEPT` leads to `AWAITING_PAYMENT` with `paymentDueAt` (behind `PAYMENTS_ENABLED`; when off, the old `ACCEPTED` path stays).
-- [ ] `POST /bookings/:id/pay`: reuses an existing order and verifies ownership and status.
-- [ ] Sweep: `AWAITING_PAYMENT` past due → `PAYMENT_EXPIRED`, slot released.
-- [ ] Tests:
+- [x] Add the `razorpay` dependency, the `PaymentGateway` interface, and the fake and Razorpay adapters.
+- [x] Migration: `Payment`, `PaymentEvent`, the new booking fields, and the new statuses in `types/index.ts`.
+- [x] `src/config/payments.ts`: fee %, windows and cancellation rules. Extend `env.ts` validation.
+- [x] `createBooking` stores `amountPaise`. `respond ACCEPT` leads to `AWAITING_PAYMENT` with `paymentDueAt` (behind `PAYMENTS_ENABLED`; when off, the old `ACCEPTED` path stays).
+- [x] `POST /bookings/:id/pay`: reuses an existing order and verifies ownership and status.
+- [x] Sweep: `AWAITING_PAYMENT` past due → `PAYMENT_EXPIRED`, slot released.
+- [x] Tests:
   - Order amount and split maths.
   - Only the booking's customer can pay.
   - A double `pay` call returns the same order.
   - Payment expiry releases the slot.
+- [x] Note: the `ArtistProfile` payout columns (§6.1) were added in this phase's migration, because an order needs the artist's linked account. `pay` refuses with a 409 while it's missing. Onboarding that fills them is still Phase 5.
+- [x] Note: `createLinkedAccount` moves to Phase 5 with the onboarding work that uses it.
 
 ### Phase 3: Webhooks and confirmation
 - [ ] Mount the webhook route with `express.raw()` before `express.json()` in `app.ts`.
 - [ ] Signature verification, event deduplication through `PaymentEvent`, and an amount check.
 - [ ] `payment.captured` → `CONFIRMED`. `payment.failed` → stays `AWAITING_PAYMENT`.
+- [ ] A capture that arrives after the booking is `PAYMENT_EXPIRED` (the booker paid at the last second) is refunded in full automatically, because the night may already be someone else's.
 - [ ] `GET /bookings/:id/payment-status`, with a server-side fetch as a fallback.
 - [ ] Tests:
   - A bad signature returns 401 and changes nothing.
