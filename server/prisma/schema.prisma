@@ -40,6 +40,12 @@ model ArtistProfile {
   youtubeUrl         String?
   instagramUrl       String?
   verificationStatus String   @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  // Payouts (Razorpay Route linked account). Raw bank account numbers and PAN are never stored.
+  payoutAccountId    String? // acc_xxx
+  payoutStatus       String   @default("NOT_STARTED") // NOT_STARTED, PENDING, ACTIVE, REJECTED
+  payoutLegalName    String?
+  payoutIfsc         String?
+  payoutAccountLast4 String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -75,22 +81,52 @@ model Booking {
   slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
   eventType     String
   eventLocation String
-  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, EXPIRED, COMPLETED (ACCEPTED -> COMPLETED by booker or 48h after eventEndsAt)
+  status        String           @default("REQUESTED") // see BookingStatus in src/types (ACCEPTED -> COMPLETED by booker or 48h after eventEndsAt)
   notes         String?
   expiresAt     DateTime? // REQUESTED offers auto-expire (and release the slot) after this instant
   eventEndsAt   DateTime? // slot date + endTime (IST), computed once at request time
   completedAt   DateTime?
+  amountPaise   Int? // fee locked when the booker requests (artist.baseFee * 100)
+  paymentDueAt  DateTime? // AWAITING_PAYMENT deadline
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   messages Message[]
   review   Review?
+  payment  Payment?
 
   @@index([customerId, createdAt])
   @@index([artistId, status])
   @@index([slotId, status])
   @@index([status, expiresAt])
   @@index([status, eventEndsAt])
+  @@index([status, paymentDueAt])
+}
+
+model Payment {
+  id                Int      @id @default(autoincrement())
+  bookingId         Int      @unique
+  // Money records must never disappear with their booking
+  booking           Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  gatewayOrderId    String   @unique // order_xxx
+  gatewayPaymentId  String?  @unique // pay_xxx
+  gatewayTransferId String? // trf_xxx (artist share, on hold)
+  amountPaise       Int // total the booker pays
+  artistSharePaise  Int
+  platformFeePaise  Int
+  status            String // CREATED, CAPTURED, RELEASED, REFUNDED, PARTIALLY_REFUNDED, FAILED
+  refundedPaise     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+/// Webhook idempotency + audit trail
+model PaymentEvent {
+  id          Int      @id @default(autoincrement())
+  eventId     String   @unique // Razorpay x-razorpay-event-id
+  type        String
+  payload     Json
+  processedAt DateTime @default(now())
 }
 
 model Message {
