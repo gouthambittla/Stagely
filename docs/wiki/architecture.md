@@ -43,12 +43,28 @@
 - **Verified Reviews & Reputation Services**:
   - `POST /api/bookings/:id/review`: Allows only the booking customer to submit a 1–5 star verified review on `COMPLETED` bookings, with duplicate prevention and compliance tags.
   - `GET /api/artists/:id/reviews`: Public list of verified reviews for an artist with calculated `averageRating` and total `reviewCount`.
+- **Payments (Razorpay Route escrow, behind `PAYMENTS_ENABLED`)**. See [workflows §4a](workflows.md) and [payments-test-mode.md](payments-test-mode.md).
+  - `src/lib/payments/`: a `PaymentGateway` interface, the Razorpay adapter, and an in-memory fake (tests and keyless dev).
+  - `src/services/payment.service.ts`: checkout, webhooks, confirmation, cancellation, disputes and the single settlement path. `src/services/payout.service.ts`: artist linked accounts.
+  - Endpoints:
+    - `GET /api/config`
+    - `POST /api/bookings/:id/pay`
+    - `GET /api/bookings/:id/payment-status`
+    - `POST /api/bookings/:id/{complete,cancel,dispute}`
+    - `GET|POST|PUT /api/artists/payout-account`
+    - `GET /api/admin/disputes`
+    - `POST /api/admin/disputes/:id/resolve`
+    - `POST /api/webhooks/razorpay` (raw body, mounted before the JSON parser)
+    - `GET /pay/:orderId` (hosted checkout page)
 
 ### 3. Core Entities
 - **User**: Base account (`id`, `firebaseUid`, `email`, `phone`, `name`, `venueName`, `city`, `contactPhone`, `role`, `createdAt`, `updatedAt`).
 - **ArtistProfile**: Linked to User (`artistName`, `category`, `genres`, `location`, `baseFee`, `bio`, `requirements`, `youtubeUrl`, `instagramUrl`, `verificationStatus: PENDING_VERIFICATION | VERIFIED | REJECTED`).
 - **AvailabilitySlot**: Linked to ArtistProfile (`date`, `startTime`, `endTime`, `isBooked`).
-- **Booking**: Linked to Customer and Artist (`slotId`, `eventLocation`, `eventType`, `status: REQUESTED | ACCEPTED | DECLINED | EXPIRED | COMPLETED`, `notes`, `expiresAt`).
+- **Booking**: Linked to Customer and Artist (`slotId`, `eventLocation`, `eventType`, `status`, `notes`, `expiresAt`, `eventEndsAt`, `completedAt`, `amountPaise`, `paymentDueAt`, cancellation, dispute and resolution fields). The statuses are `REQUESTED | ACCEPTED | DECLINED | EXPIRED | COMPLETED | AWAITING_PAYMENT | PAYMENT_EXPIRED | CONFIRMED | DISPUTED | CANCELLED_BY_ARTIST | CANCELLED_BY_CUSTOMER | REFUNDED`.
+- **Payment**: 1:1 with Booking. It holds the Razorpay order, payment and transfer ids, the amount and its split (in paise), `refundTargetPaise`, `refundedPaise` and `status`. It can't be deleted with its booking.
+- **PaymentEvent**: The Razorpay webhook audit trail and idempotency key (`eventId` unique).
+- **ArtistProfile payout fields**: `payoutAccountId`, `payoutProductId`, `payoutStatus`, `payoutLegalName`, `payoutIfsc`, `payoutAccountLast4`. PAN and the full account number are never stored.
 - **Review**: Linked to Booking (1:1), ArtistProfile (N:1), and Customer User (N:1) (`rating: 1-5`, `comment`, `tags`, `createdAt`).
 - **Message**: Linked to Booking/Conversation (`bookingId`, `senderId`, `content`, `createdAt`).
 

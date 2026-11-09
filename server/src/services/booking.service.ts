@@ -263,6 +263,15 @@ export class BookingService {
       throw new Error(`Cannot respond to a booking with status ${booking.status}`);
     }
 
+    // With payments on, the artist's share has nowhere to go until Razorpay activates their account
+    if (action === 'ACCEPT' && paymentsConfig().enabled && booking.artist.payoutStatus !== 'ACTIVE') {
+      throw conflict(
+        booking.artist.payoutStatus === 'PENDING'
+          ? 'Your payout account is still being verified by Razorpay. You can accept bookings once it is active.'
+          : 'Set up payouts before accepting bookings.'
+      );
+    }
+
     // With payments on, an accepted booking waits for the booker to pay; otherwise it's
     // settled offline as before.
     const paymentsOn = paymentsConfig().enabled;

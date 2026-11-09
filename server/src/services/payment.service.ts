@@ -6,6 +6,7 @@ import { getPaymentGateway } from '../lib/payments';
 import { artistShareAfterRefund, customerRefundPercent, paymentsConfig, splitAmount } from '../config/payments';
 import { BookingStatus, PaymentStatus } from '../types';
 import { BookingService, computeEventEnd, computeEventStart, releaseSlotsIfFree } from './booking.service';
+import { PayoutService } from './payout.service';
 
 export interface CheckoutDetails {
   orderId: string;
@@ -184,6 +185,16 @@ export class PaymentService {
     });
 
     if (outcome) await PaymentService.settleCaptureOutcome(outcome);
+
+    // Linked-account activation changes: don't trust the payload's status, ask Razorpay
+    if (type.startsWith('product.route.') || type.startsWith('account.')) {
+      const candidates = new Set<string>(
+        [event?.payload?.account?.entity?.id, event?.payload?.merchant_product?.entity?.merchant_id, event?.account_id].filter(
+          (id): id is string => typeof id === 'string' && id.startsWith('acc_')
+        )
+      );
+      for (const accountId of candidates) await PayoutService.refreshByAccountId(accountId);
+    }
   }
 
   /**
@@ -276,6 +287,26 @@ export class PaymentService {
   }
 
   /**
+   * Asks the gateway whether an order has a captured payment and, if so, applies it exactly as
+   * a webhook would. Returns true if a capture was found.
+   */
+  static async reconcileOrder(gatewayOrderId: string): Promise<boolean> {
+    const attempts = await getPaymentGateway().fetchOrderPayments(gatewayOrderId);
+    const captured = attempts.find((p) => p.status === 'captured');
+    if (!captured) return false;
+    const outcome = await prisma.$transaction((tx) =>
+      PaymentService.applyCapture(tx, {
+        id: captured.id,
+        order_id: captured.orderId,
+        amount: captured.amountPaise,
+        currency: 'INR'
+      })
+    );
+    await PaymentService.settleCaptureOutcome(outcome);
+    return true;
+  }
+
+  /**
    * Where a booking's payment stands, for the app to poll after checkout. While the booking is
    * still awaiting payment, the gateway is asked directly in case the webhook is late.
    */
@@ -294,18 +325,7 @@ export class PaymentService {
 
     if (booking.status === BookingStatus.AWAITING_PAYMENT && booking.payment) {
       try {
-        const attempts = await getPaymentGateway().fetchOrderPayments(booking.payment.gatewayOrderId);
-        const captured = attempts.find((p) => p.status === 'captured');
-        if (captured) {
-          const outcome = await prisma.$transaction((tx) =>
-            PaymentService.applyCapture(tx, {
-              id: captured.id,
-              order_id: captured.orderId,
-              amount: captured.amountPaise,
-              currency: 'INR'
-            })
-          );
-          await PaymentService.settleCaptureOutcome(outcome);
+        if (await PaymentService.reconcileOrder(booking.payment.gatewayOrderId)) {
           booking = (await find())!;
         }
       } catch (err) {

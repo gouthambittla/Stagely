@@ -1,14 +1,32 @@
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import {
+  BankDetailsInput,
   CreateHeldOrderInput,
   GatewayOrder,
   GatewayPayment,
   GatewayPaymentStatus,
   GatewayTransfer,
+  LinkedAccount,
+  LinkedAccountInput,
+  LinkedAccountStatus,
   PaymentGateway
 } from './gateway';
 import { safeEqualHex } from './fake.gateway';
+
+/** Route product activation_status → our simplified status. */
+export function mapActivationStatus(activationStatus: string | undefined): LinkedAccountStatus {
+  switch (activationStatus) {
+    case 'activated':
+      return 'ACTIVE';
+    case 'rejected':
+    case 'suspended':
+      return 'REJECTED';
+    default:
+      // requested, needs_clarification, under_review, ...
+      return 'PENDING';
+  }
+}
 
 export interface RazorpayCredentials {
   keyId: string;
@@ -32,6 +50,72 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     this.keyId = creds.keyId;
     this.webhookSecret = creds.webhookSecret;
     this.client = new Razorpay({ key_id: creds.keyId, key_secret: creds.keySecret });
+  }
+
+  /**
+   * Route linked-account onboarding (Razorpay "Linked Accounts v2"): account → stakeholder (PAN)
+   * → request the Route product → set settlement bank details. Activation is then asynchronous.
+   * Field names follow the SDK types; verify against Razorpay Test Mode (docs/wiki/payments-test-mode.md).
+   */
+  async createLinkedAccount(input: LinkedAccountInput): Promise<LinkedAccount> {
+    const account = await this.client.accounts.create({
+      email: input.email,
+      phone: input.phone,
+      type: 'route',
+      reference_id: input.referenceId,
+      legal_business_name: input.legalName,
+      business_type: 'individual',
+      contact_name: input.legalName,
+      profile: {
+        category: process.env.RAZORPAY_ROUTE_CATEGORY || 'others',
+        subcategory: process.env.RAZORPAY_ROUTE_SUBCATEGORY || 'others',
+        addresses: {
+          registered: {
+            street1: input.address.street1,
+            street2: input.address.street2 || input.address.city,
+            city: input.address.city,
+            state: input.address.state,
+            postal_code: input.address.postalCode,
+            country: 'IN'
+          }
+        }
+      }
+    } as Parameters<Razorpay['accounts']['create']>[0]);
+
+    await this.client.stakeholders.create(account.id, {
+      name: input.legalName,
+      email: input.email,
+      kyc: { pan: input.pan }
+    } as Parameters<Razorpay['stakeholders']['create']>[1]);
+
+    const product = await this.client.products.requestProductConfiguration(account.id, {
+      product_name: 'route',
+      tnc_accepted: true
+    });
+
+    const status = await this.updateLinkedAccountBank(account.id, product.id, {
+      legalName: input.legalName,
+      accountNumber: input.accountNumber,
+      ifsc: input.ifsc
+    });
+    return { accountId: account.id, productId: product.id, status };
+  }
+
+  async updateLinkedAccountBank(accountId: string, productId: string, bank: BankDetailsInput): Promise<LinkedAccountStatus> {
+    const product = await this.client.products.edit(accountId, productId, {
+      settlements: {
+        account_number: bank.accountNumber,
+        ifsc_code: bank.ifsc,
+        beneficiary_name: bank.legalName
+      },
+      tnc_accepted: true
+    } as Parameters<Razorpay['products']['edit']>[2]);
+    return mapActivationStatus(product.activation_status);
+  }
+
+  async fetchLinkedAccountStatus(accountId: string, productId: string): Promise<LinkedAccountStatus> {
+    const product = await this.client.products.fetch(accountId, productId);
+    return mapActivationStatus(product.activation_status);
   }
 
   async createOrderWithHeldTransfer(input: CreateHeldOrderInput): Promise<GatewayOrder> {

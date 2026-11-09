@@ -12,6 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../hooks/useAppConfig';
+import { getStatusTheme, isBeforeEventStart, formatDateTimeIST } from '../../utils/bookingStatus';
+import { bookingAmountPaise, formatPaise } from '../../utils/money';
 import {
   Check,
   X,
@@ -21,12 +24,16 @@ import {
   MapPin,
   ShieldCheck,
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  Wallet,
+  ChevronRight,
+  Ban
 } from 'lucide-react-native';
 
 interface ArtistDashboardScreenProps {
   onOpenChat: (booking: any) => void;
   onManageSchedule: () => void;
+  onOpenPayouts?: () => void;
   requests?: any[];
   onAccept?: (bookingId: number) => void;
 }
@@ -34,6 +41,7 @@ interface ArtistDashboardScreenProps {
 export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
   onOpenChat,
   onManageSchedule,
+  onOpenPayouts,
   requests: propRequests,
   onAccept: propOnAccept
 }) => {
@@ -42,10 +50,15 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
   const [loading, setLoading] = useState<boolean>(!propRequests);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const { config } = useAppConfig();
+  const paymentsEnabled = config.paymentsEnabled;
 
   const profile = user?.artistProfile;
   const isVerified = profile?.verificationStatus === 'VERIFIED';
   const isPending = profile?.verificationStatus === 'PENDING_VERIFICATION';
+  const payoutStatus: string = profile?.payoutStatus ?? 'NOT_STARTED';
+  const showPayoutBanner = paymentsEnabled && payoutStatus !== 'ACTIVE';
 
   const fetchArtistBookings = async () => {
     try {
@@ -79,17 +92,57 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
       Alert.alert('Booking Updated', `Booking request has been ${action === 'ACCEPT' ? 'accepted' : 'declined'}.`);
       fetchArtistBookings();
     } catch (err: any) {
-      Alert.alert('Action Failed', err.message || 'Unable to update booking');
+      const message = err.message || 'Unable to update booking';
+      if (action === 'ACCEPT' && err?.status === 409 && onOpenPayouts && /payout/i.test(message)) {
+        Alert.alert('Payouts needed', message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Payout details', onPress: onOpenPayouts }
+        ]);
+      } else {
+        Alert.alert('Action Failed', message);
+      }
+      // A 409 can also mean the booking changed meanwhile
+      if (err?.status === 409) fetchArtistBookings();
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const confirmCancel = (booking: any) => {
+    const paid = booking.status === 'CONFIRMED';
+    Alert.alert(
+      'Cancel this booking?',
+      paid
+        ? 'The booker gets a full refund and the date is released. This cannot be undone.'
+        : "The booker hasn't paid yet, so nothing is charged. This cannot be undone.",
+      [
+        { text: 'Keep booking', style: 'cancel' },
+        { text: 'Cancel booking', style: 'destructive', onPress: () => cancelBooking(booking) }
+      ]
+    );
+  };
+
+  const cancelBooking = async (booking: any) => {
+    setCancellingId(booking.id);
+    try {
+      const res = await api.cancelBooking(booking.id);
+      Alert.alert('Booking cancelled', res.message || 'The booker has been notified.');
+    } catch (err: any) {
+      Alert.alert('Could not cancel', err.message || 'Unable to cancel this booking');
+    } finally {
+      setCancellingId(null);
+      fetchArtistBookings();
     }
   };
 
   const renderRequestCard = ({ item }: { item: any }) => {
     const isProcessing = processingId === item.id;
     const isRequested = item.status === 'REQUESTED';
-    const isAccepted = item.status === 'ACCEPTED';
-    const isCompleted = item.status === 'COMPLETED';
+    const statusTheme = getStatusTheme(item.status);
+    const isCancelling = cancellingId === item.id;
+    const canCancel =
+      (item.status === 'AWAITING_PAYMENT' || item.status === 'CONFIRMED') && isBeforeEventStart(item);
+    const amountPaise = bookingAmountPaise(item);
     const customer = item.customer || {};
     const slot = item.slot || {};
 
@@ -103,29 +156,10 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
           <View
             style={[
               styles.statusBadge,
-              isAccepted
-                ? styles.badgeAccepted
-                : isCompleted
-                ? styles.badgeCompleted
-                : isRequested
-                ? styles.badgeRequested
-                : styles.badgeDeclined
+              { backgroundColor: statusTheme.bg, borderColor: statusTheme.border }
             ]}
           >
-            <Text
-              style={[
-                styles.statusText,
-                isAccepted
-                  ? styles.textAccepted
-                  : isCompleted
-                  ? styles.textCompleted
-                  : isRequested
-                  ? styles.textRequested
-                  : styles.textDeclined
-              ]}
-            >
-              {item.status}
-            </Text>
+            <Text style={[styles.statusText, { color: statusTheme.text }]}>{statusTheme.label}</Text>
           </View>
         </View>
 
@@ -148,8 +182,23 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
           </View>
         </View>
 
+        {paymentsEnabled && item.amountPaise != null && amountPaise !== null ? (
+          <Text style={styles.amountText}>Booking amount: {formatPaise(amountPaise)}</Text>
+        ) : null}
+
         {item.notes ? (
           <Text style={styles.notesText}>Note: "{item.notes}"</Text>
+        ) : null}
+
+        {item.status === 'AWAITING_PAYMENT' ? (
+          <Text style={styles.statusNote}>
+            Waiting for the booker to pay
+            {item.paymentDueAt ? ` by ${formatDateTimeIST(item.paymentDueAt)}` : ''}. The date is held until then.
+          </Text>
+        ) : item.status === 'CONFIRMED' ? (
+          <Text style={styles.statusNote}>Paid and confirmed. Your fee is released after the gig.</Text>
+        ) : item.status === 'DISPUTED' ? (
+          <Text style={styles.statusNote}>The booker reported a problem. Stagely is reviewing it.</Text>
         ) : null}
 
         {isRequested ? (
@@ -189,6 +238,23 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
                 )}
               </TouchableOpacity>
             </>
+          )}
+
+          {canCancel && (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.declineBtn, isCancelling && { opacity: 0.6 }]}
+              onPress={() => confirmCancel(item)}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <ActivityIndicator size="small" color="#F87171" />
+              ) : (
+                <>
+                  <Ban size={16} color="#F87171" />
+                  <Text style={styles.declineText}>Cancel</Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity
@@ -239,6 +305,35 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
             </Text>
           </View>
         </View>
+      )}
+
+      {/* Payout Setup Banner (payments only) */}
+      {showPayoutBanner && (
+        <TouchableOpacity
+          style={styles.payoutBanner}
+          onPress={onOpenPayouts}
+          disabled={!onOpenPayouts}
+          activeOpacity={0.85}
+        >
+          <Wallet size={18} color="#60A5FA" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.payoutTitle}>
+              {payoutStatus === 'PENDING'
+                ? 'Payout account under review'
+                : payoutStatus === 'REJECTED'
+                ? 'Payout details need attention'
+                : 'Set up payouts to accept bookings'}
+            </Text>
+            <Text style={styles.payoutDesc}>
+              {payoutStatus === 'PENDING'
+                ? "Razorpay is verifying your bank account. You can accept bookings once it's active."
+                : payoutStatus === 'REJECTED'
+                ? 'Razorpay could not verify your bank details. Tap to update them.'
+                : 'Add your bank details so bookers can pay you through Stagely.'}
+            </Text>
+          </View>
+          {onOpenPayouts ? <ChevronRight size={18} color="#60A5FA" /> : null}
+        </TouchableOpacity>
       )}
 
       {/* Booking Requests List */}
@@ -407,37 +502,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1
   },
-  badgeAccepted: {
-    backgroundColor: '#064E3B',
-    borderColor: '#059669'
-  },
-  badgeRequested: {
-    backgroundColor: '#451A03',
-    borderColor: '#78350F'
-  },
-  badgeCompleted: {
-    backgroundColor: '#1E1B4B',
-    borderColor: '#4338CA'
-  },
-  badgeDeclined: {
-    backgroundColor: '#450A0A',
-    borderColor: '#7F1D1D'
-  },
   statusText: {
     fontSize: 11,
     fontWeight: '700'
-  },
-  textAccepted: {
-    color: '#34D399'
-  },
-  textRequested: {
-    color: '#F5A623'
-  },
-  textCompleted: {
-    color: '#A78BFA'
-  },
-  textDeclined: {
-    color: '#F87171'
   },
   infoBox: {
     backgroundColor: '#0B0D13',
@@ -453,6 +520,38 @@ const styles = StyleSheet.create({
   infoText: {
     color: '#CBD5E1',
     fontSize: 12
+  },
+  amountText: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  statusNote: {
+    color: '#94A3B8',
+    fontSize: 12,
+    lineHeight: 17
+  },
+  payoutBanner: {
+    flexDirection: 'row',
+    backgroundColor: '#0C1A2E',
+    borderColor: '#1D4ED8',
+    borderWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    gap: 10,
+    alignItems: 'center'
+  },
+  payoutTitle: {
+    color: '#60A5FA',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  payoutDesc: {
+    color: '#93C5FD',
+    fontSize: 11,
+    lineHeight: 15
   },
   notesText: {
     color: '#94A3B8',

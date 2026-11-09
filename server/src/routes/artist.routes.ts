@@ -5,6 +5,9 @@ import { authenticate, requireRole, AuthenticatedRequest } from '../middlewares/
 import { UserRole } from '../types';
 import { sendError, parseId, parseText } from '../lib/http';
 import { parseBaseFee, parseGenres, parseOptionalText, parseSlots } from '../lib/artistValidation';
+import { parseBankDetails, parsePayoutDetails } from '../lib/payoutValidation';
+import { PayoutService } from '../services/payout.service';
+import { paymentsConfig } from '../config/payments';
 
 const router = Router();
 
@@ -12,6 +15,8 @@ const router = Router();
 router.post('/onboard', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const body = req.body ?? {};
+    // Payout setup is a mandatory onboarding step once payments are live
+    const payoutDetails = paymentsConfig().enabled ? parsePayoutDetails(body.payout) : undefined;
     const artistProfile = await ArtistService.onboard(req.user!.id, {
       artistName: parseText(body.artistName, 'artistName', { required: true, max: 100 })!,
       category: parseText(body.category, 'category', { required: true, max: 50 })!,
@@ -23,9 +28,38 @@ router.post('/onboard', authenticate, requireRole([UserRole.ARTIST]), async (req
       youtubeUrl: parseOptionalText(body.youtubeUrl, 'youtubeUrl', 300),
       instagramUrl: parseOptionalText(body.instagramUrl, 'instagramUrl', 300),
       availableSlots: parseSlots(body.availableSlots)
-    });
+    }, payoutDetails);
 
     res.status(201).json({ message: 'Onboarding completed successfully', artistProfile });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+// GET /api/artists/payout-account - The artist's own payout details (masked) and status
+router.get('/payout-account', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.status(200).json({ payoutAccount: await PayoutService.getPayoutAccount(req.user!.id) });
+  } catch (err) {
+    sendError(res, err, 500);
+  }
+});
+
+// POST /api/artists/payout-account - First-time setup (artists onboarded before payments) or retry after rejection
+router.post('/payout-account', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const payoutAccount = await PayoutService.setUpPayoutAccount(req.user!.id, parsePayoutDetails(req.body));
+    res.status(201).json({ payoutAccount });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+// PUT /api/artists/payout-account - Change the bank account payouts go to
+router.put('/payout-account', authenticate, requireRole([UserRole.ARTIST]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const payoutAccount = await PayoutService.updateBankDetails(req.user!.id, parseBankDetails(req.body));
+    res.status(200).json({ payoutAccount });
   } catch (err) {
     sendError(res, err, 400);
   }

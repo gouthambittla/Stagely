@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { PhoneLoginScreen } from '../screens/auth/PhoneLoginScreen';
@@ -15,7 +15,10 @@ import ScheduleManagerScreen from '../screens/artist/ScheduleManagerScreen';
 import ArtistStudioScreen from '../screens/artist/ArtistStudioScreen';
 import ChatScreen from '../screens/common/ChatScreen';
 import AdminVerificationScreen from '../screens/admin/AdminVerificationScreen';
-import { Music, Calendar, User as UserIcon, Compass } from 'lucide-react-native';
+import AdminDisputesScreen from '../screens/admin/AdminDisputesScreen';
+import PayoutDetailsScreen from '../screens/artist/PayoutDetailsScreen';
+import { useAppConfig } from '../hooks/useAppConfig';
+import { Music, Calendar, User as UserIcon, Compass, ShieldCheck, Scale } from 'lucide-react-native';
 
 export const RootNavigator: React.FC = () => {
   const { user, isNewUser, isLoading, logout } = useAuth();
@@ -31,6 +34,16 @@ export const RootNavigator: React.FC = () => {
 
   // Artist Navigation State
   const [artistTab, setArtistTab] = useState<'DASHBOARD' | 'SCHEDULE' | 'PROFILE'>('DASHBOARD');
+  const [showPayoutDetails, setShowPayoutDetails] = useState<boolean>(false);
+
+  // Admin Navigation State
+  const [adminTab, setAdminTab] = useState<'VERIFICATION' | 'DISPUTES'>('VERIFICATION');
+
+  // Server feature flags (payments on/off). Re-checked whenever the signed-in user changes.
+  const { config, reload: reloadConfig } = useAppConfig();
+  useEffect(() => {
+    if (user) reloadConfig();
+  }, [user?.id]);
 
   // Shared Chat Modal State
   const [activeChatBooking, setActiveChatBooking] = useState<any | null>(null);
@@ -95,13 +108,45 @@ export const RootNavigator: React.FC = () => {
 
   // 4. ADMIN Flow
   if (user.role === 'ADMIN') {
-    return <AdminVerificationScreen />;
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          {adminTab === 'VERIFICATION' ? <AdminVerificationScreen /> : <AdminDisputesScreen />}
+        </View>
+
+        {/* Bottom Tab Bar for Admin */}
+        <View style={styles.bottomTabBar}>
+          <TouchableOpacity style={styles.tabItem} onPress={() => setAdminTab('VERIFICATION')}>
+            <ShieldCheck size={20} color={adminTab === 'VERIFICATION' ? '#F5A623' : '#64748B'} />
+            <Text style={[styles.tabLabel, adminTab === 'VERIFICATION' && styles.tabLabelActive]}>
+              Verification
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabItem} onPress={() => setAdminTab('DISPUTES')}>
+            <Scale size={20} color={adminTab === 'DISPUTES' ? '#F5A623' : '#64748B'} />
+            <Text style={[styles.tabLabel, adminTab === 'DISPUTES' && styles.tabLabelActive]}>
+              Disputes
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   // 5. ARTIST Flow
   if (user.role === 'ARTIST') {
     if (!user.artistProfile) {
       return <OnboardingWizardScreen onComplete={() => setArtistTab('DASHBOARD')} />;
+    }
+
+    // Artists who onboarded before payments existed must add payout details before continuing
+    if (config.paymentsEnabled && (user.artistProfile.payoutStatus ?? 'NOT_STARTED') === 'NOT_STARTED') {
+      return <PayoutDetailsScreen blocking />;
+    }
+
+    if (showPayoutDetails) {
+      return <PayoutDetailsScreen onBack={() => setShowPayoutDetails(false)} />;
     }
 
     return (
@@ -111,13 +156,17 @@ export const RootNavigator: React.FC = () => {
             <ArtistDashboardScreen
               onOpenChat={(b) => setActiveChatBooking(b)}
               onManageSchedule={() => setArtistTab('SCHEDULE')}
+              onOpenPayouts={() => setShowPayoutDetails(true)}
             />
           )}
           {artistTab === 'SCHEDULE' && (
             <ScheduleManagerScreen onBack={() => setArtistTab('DASHBOARD')} />
           )}
           {artistTab === 'PROFILE' && (
-            <ArtistStudioScreen onManageSchedule={() => setArtistTab('SCHEDULE')} />
+            <ArtistStudioScreen
+              onManageSchedule={() => setArtistTab('SCHEDULE')}
+              onOpenPayouts={config.paymentsEnabled ? () => setShowPayoutDetails(true) : undefined}
+            />
           )}
         </View>
 

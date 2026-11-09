@@ -247,6 +247,119 @@ export interface ArtistReviewsResponse {
   averageRating: number | null;
 }
 
+
+// ---------- Payments ----------
+
+export type BookingStatus =
+  | 'REQUESTED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'EXPIRED'
+  | 'COMPLETED'
+  | 'AWAITING_PAYMENT'
+  | 'PAYMENT_EXPIRED'
+  | 'CONFIRMED'
+  | 'DISPUTED'
+  | 'CANCELLED_BY_ARTIST'
+  | 'CANCELLED_BY_CUSTOMER'
+  | 'REFUNDED';
+
+export interface CancellationBand {
+  minHoursBefore: number;
+  refundPercent: number;
+}
+
+export interface AppConfig {
+  paymentsEnabled: boolean;
+  platformFeePercent: number;
+  paymentWindowHours: number;
+  disputeWindowHours: number;
+  customerCancellationPolicy: CancellationBand[];
+}
+
+export interface PayBookingResponse {
+  orderId: string;
+  keyId: string;
+  amountPaise: number;
+  checkoutUrl: string;
+}
+
+export interface PaymentStatusResponse {
+  bookingId: number;
+  bookingStatus: BookingStatus;
+  paymentStatus: string | null;
+  amountPaise: number | null;
+  paymentDueAt: string | null;
+}
+
+export type PayoutStatus = 'NOT_STARTED' | 'PENDING' | 'ACTIVE' | 'REJECTED';
+
+export interface PayoutAccount {
+  status: PayoutStatus;
+  legalName: string | null;
+  ifsc: string | null;
+  accountNumberMasked: string | null;
+}
+
+export interface PayoutAddress {
+  street1: string;
+  street2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
+export interface PayoutDetailsInput {
+  legalName: string;
+  email: string;
+  phone: string;
+  pan: string;
+  accountNumber: string;
+  ifsc: string;
+  address: PayoutAddress;
+}
+
+export interface PayoutBankUpdateInput {
+  legalName: string;
+  accountNumber: string;
+  ifsc: string;
+}
+
+export interface DisputeMessage {
+  content: string;
+  createdAt: string;
+  sender: { id: number; name: string | null; role: string };
+}
+
+export interface AdminDispute {
+  id: number;
+  status: BookingStatus;
+  eventType?: string;
+  eventLocation?: string;
+  amountPaise: number | null;
+  disputeReason: string | null;
+  disputedAt: string | null;
+  eventEndsAt?: string | null;
+  artist: { id: number; artistName: string };
+  customer: {
+    id: number;
+    name: string | null;
+    venueName: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  slot: { date: string; startTime: string; endTime: string } | null;
+  payment: {
+    amountPaise: number;
+    artistSharePaise: number;
+    platformFeePaise: number;
+    status: string;
+  } | null;
+  messages: DisputeMessage[];
+}
+
+export type DisputeOutcome = 'PAY_ARTIST' | 'REFUND' | 'SPLIT';
+
 export const api = {
   // Auth
   syncFirebaseUser: (idToken: string) =>
@@ -276,11 +389,18 @@ export const api = {
   getArtistById: (id: number) => request<{ artist: any; averageRating?: number | null; reviewCount?: number }>(`/artists/${id}`),
 
   // Artist Management
-  onboardArtist: (body: any) => request<any>('/artists/onboard', { method: 'POST', body: JSON.stringify(body) }),
+  onboardArtist: (body: Record<string, any> & { payout?: PayoutDetailsInput }) => request<any>('/artists/onboard', { method: 'POST', body: JSON.stringify(body) }),
   updateSchedule: (slots: any[]) => request<any>('/artists/schedule', { method: 'POST', body: JSON.stringify({ slots }) }),
   getMyProfile: () => request<ArtistStudioProfileResponse>('/artists/my-profile'),
   updateArtistProfile: (body: UpdateArtistProfileInput) =>
     request<ArtistStudioProfileResponse>('/artists/my-profile', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Payouts (artist)
+  getPayoutAccount: () => request<{ payoutAccount: PayoutAccount }>('/artists/payout-account'),
+  setUpPayoutAccount: (body: PayoutDetailsInput) =>
+    request<{ payoutAccount: PayoutAccount }>('/artists/payout-account', { method: 'POST', body: JSON.stringify(body) }),
+  updatePayoutBank: (body: PayoutBankUpdateInput) =>
+    request<{ payoutAccount: PayoutAccount }>('/artists/payout-account', { method: 'PUT', body: JSON.stringify(body) }),
 
   // Reviews & Ratings
   submitBookingReview: (bookingId: number, body: ReviewInput) =>
@@ -298,11 +418,34 @@ export const api = {
     request<any>(`/bookings/${id}/respond`, { method: 'PUT', body: JSON.stringify({ action }) }),
   completeBooking: (bookingId: number) =>
     request<{ message: string; booking: any }>(`/bookings/${bookingId}/complete`, { method: 'POST' }),
+  payBooking: (bookingId: number) =>
+    request<PayBookingResponse>(`/bookings/${bookingId}/pay`, { method: 'POST' }),
+  getPaymentStatus: (bookingId: number) =>
+    request<PaymentStatusResponse>(`/bookings/${bookingId}/payment-status`),
+  cancelBooking: (bookingId: number, reason?: string) =>
+    request<{ message: string; booking: any; refundPaise: number }>(`/bookings/${bookingId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {})
+    }),
+  disputeBooking: (bookingId: number, reason: string) =>
+    request<{ message: string; booking: any }>(`/bookings/${bookingId}/dispute`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    }),
   getMessages: (bookingId: number) => request<{ messages: any[] }>(`/bookings/${bookingId}/messages`),
   sendMessage: (bookingId: number, content: string) =>
     request<any>(`/bookings/${bookingId}/messages`, { method: 'POST', body: JSON.stringify({ content }) }),
 
+  // Config
+  getConfig: () => request<AppConfig>('/config'),
+
   // Admin
+  getDisputes: () => request<{ disputes: AdminDispute[] }>('/admin/disputes'),
+  resolveDispute: (bookingId: number, outcome: DisputeOutcome, refundPaise?: number) =>
+    request<{ message: string; booking: any }>(`/admin/disputes/${bookingId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(outcome === 'SPLIT' ? { outcome, refundPaise } : { outcome })
+    }),
   getPendingArtists: () => request<{ pendingArtists: any[] }>('/admin/artists/pending'),
   verifyArtist: (id: number, status: 'VERIFIED' | 'REJECTED') =>
     request<any>(`/admin/artists/${id}/verify`, { method: 'PUT', body: JSON.stringify({ status }) })

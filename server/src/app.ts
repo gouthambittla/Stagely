@@ -7,6 +7,9 @@ import discoveryRoutes from './routes/discovery.routes';
 import bookingRoutes from './routes/booking.routes';
 import userRoutes from './routes/users.routes';
 import webhookRoutes from './routes/webhook.routes';
+import checkoutRoutes from './routes/checkout.routes';
+import { redactSensitiveJson } from './lib/redact';
+import { CUSTOMER_CANCELLATION_POLICY, paymentsConfig } from './config/payments';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { prisma } from './lib/prisma';
@@ -18,6 +21,9 @@ const isTest = process.env.NODE_ENV === 'test';
 // Behind a load balancer / reverse proxy, trust the first hop so req.ip and rate limits
 // use the real client address. Set TRUST_PROXY to the number of proxy hops (default 0).
 app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 0));
+
+// Strip artists' payout identifiers from every JSON response (see lib/redact.ts)
+app.set('json replacer', redactSensitiveJson);
 
 app.use(helmet());
 
@@ -32,6 +38,9 @@ app.use(cors(corsOrigins.length > 0 ? { origin: corsOrigins } : undefined));
 // Payment webhooks need the raw body for signature checks, so they're mounted before the JSON
 // parser. They're also outside the /api rate limiter: Razorpay delivers in bursts from few IPs.
 app.use('/api/webhooks', webhookRoutes);
+
+// Hosted checkout page the app opens in a browser (sets its own CSP for Razorpay's script)
+app.use('/pay', checkoutRoutes);
 
 app.use(express.json({ limit: '100kb' }));
 
@@ -77,6 +86,18 @@ app.use('/api/artists', artistRoutes);
 app.use('/api/artists', discoveryRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/bookings', bookingRoutes);
+
+// GET /api/config - Public settings the app needs (whether payments are live, policy numbers)
+app.get('/api/config', (req, res) => {
+  const cfg = paymentsConfig();
+  res.json({
+    paymentsEnabled: cfg.enabled,
+    platformFeePercent: cfg.platformFeePercent,
+    paymentWindowHours: cfg.paymentWindowHours,
+    disputeWindowHours: cfg.disputeWindowHours,
+    customerCancellationPolicy: CUSTOMER_CANCELLATION_POLICY
+  });
+});
 
 // Unknown routes
 app.use((req, res) => {

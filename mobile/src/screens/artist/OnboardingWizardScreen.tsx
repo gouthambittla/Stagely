@@ -12,6 +12,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useAppConfig } from '../../hooks/useAppConfig';
+import { PayoutFormFields, PayoutReassurance } from '../../components/PayoutFormFields';
+import {
+  emptyPayoutForm,
+  normalizeIndianPhone,
+  PayoutFormField,
+  PayoutFormValues,
+  validatePayoutDetails
+} from '../../utils/payoutValidation';
 import {
   Music,
   Calendar,
@@ -28,7 +37,10 @@ const CATEGORIES = ['Band', 'Solo Musician', 'Singer', 'DJ', 'Acoustic Duo', 'Da
 const POPULAR_GENRES = ['Tollywood Retro', 'Fusion Rock', 'Indie Pop', 'Sufi', 'Blues & Jazz', 'Carnatic Progressive', 'Bollywood Live'];
 
 export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
-  const { refreshUser } = useAuth();
+  const { user, firebaseUser, refreshUser } = useAuth();
+  const { config } = useAppConfig();
+  const paymentsEnabled = config.paymentsEnabled;
+  const totalSteps = paymentsEnabled ? 4 : 3;
   const [step, setStep] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
@@ -43,6 +55,24 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
   const [requirements, setRequirements] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
+
+  // Step 4 (payments only): payout details
+  const [payoutForm, setPayoutForm] = useState<PayoutFormValues>(() =>
+    emptyPayoutForm({
+      email: user?.email || firebaseUser?.email || '',
+      phone: normalizeIndianPhone(user?.phone || firebaseUser?.phoneNumber || '')
+    })
+  );
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+  const [payoutErrorField, setPayoutErrorField] = useState<PayoutFormField | null>(null);
+
+  const updatePayoutForm = (patch: Partial<PayoutFormValues>) => {
+    setPayoutForm(prev => ({ ...prev, ...patch }));
+    if (payoutErrorField && payoutErrorField in patch) {
+      setPayoutErrorField(null);
+      setPayoutError(null);
+    }
+  };
 
   // 15-day availability generator
   const generateInitialSlots = () => {
@@ -88,6 +118,19 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
       return;
     }
 
+    let payout: ReturnType<typeof validatePayoutDetails> | null = null;
+    if (paymentsEnabled) {
+      payout = validatePayoutDetails(payoutForm);
+      if (!payout.ok) {
+        setPayoutError(payout.error);
+        setPayoutErrorField(payout.field);
+        setStep(4);
+        return;
+      }
+    }
+    setPayoutError(null);
+    setPayoutErrorField(null);
+
     setLoading(true);
     try {
       const activeSlots = scheduleSlots
@@ -108,14 +151,20 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
         requirements: requirements.trim(),
         youtubeUrl: youtubeUrl.trim(),
         instagramUrl: instagramUrl.trim(),
-        availableSlots: activeSlots
+        availableSlots: activeSlots,
+        ...(payout && payout.ok ? { payout: payout.value } : {})
       });
 
       // Show the confirmation first. Refreshing the session now would make the navigator
       // swap this screen for the dashboard before the artist ever sees it.
       setSubmitted(true);
     } catch (err: any) {
-      Alert.alert('Onboarding Error', err.message || 'Failed to submit onboarding profile.');
+      if (paymentsEnabled && step === 4 && (err?.status === 400 || err?.status === 422)) {
+        // Most likely a payout-detail problem (or Razorpay rejected the details): show it inline
+        setPayoutError(err.message || 'Please check your payout details.');
+      } else {
+        Alert.alert('Onboarding Error', err.message || 'Failed to submit onboarding profile.');
+      }
     } finally {
       setLoading(false);
     }
@@ -167,9 +216,9 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Artist Setup ({step}/3)</Text>
+        <Text style={styles.headerTitle}>Artist Setup ({step}/{totalSteps})</Text>
         <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(step / 3) * 100}%` }]} />
+          <View style={[styles.progressFill, { width: `${(step / totalSteps) * 100}%` }]} />
         </View>
       </View>
 
@@ -361,6 +410,56 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
               <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
                 <Text style={styles.backButtonText}>Back</Text>
               </TouchableOpacity>
+              {paymentsEnabled ? (
+                <TouchableOpacity style={[styles.nextButton, { flex: 1 }]} onPress={() => setStep(4)}>
+                  <Text style={styles.nextButtonText}>Next: Payout Details</Text>
+                  <ArrowRight size={18} color="#0B0D13" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.nextButton, { flex: 1, backgroundColor: '#F5A623' }]}
+                  onPress={handleSubmit}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#0B0D13" />
+                  ) : (
+                    <Text style={styles.nextButtonText}>Submit Application</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
+        {step === 4 && paymentsEnabled && (
+          <View style={styles.stepContainer}>
+            <Text style={styles.stepHeading}>Payout Details</Text>
+            <Text style={styles.stepSubheading}>
+              Bookers pay through Stagely and we release your fee after each gig. Tell us where to send it.
+            </Text>
+
+            <PayoutReassurance />
+
+            <PayoutFormFields
+              values={payoutForm}
+              onChange={updatePayoutForm}
+              mode="full"
+              errorField={payoutErrorField}
+              editable={!loading}
+            />
+
+            {payoutError ? (
+              <View style={styles.errorBanner}>
+                <ShieldAlert size={16} color="#F87171" />
+                <Text style={styles.errorBannerText}>{payoutError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setStep(3)} disabled={loading}>
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.nextButton, { flex: 1, backgroundColor: '#F5A623' }]}
                 onPress={handleSubmit}
@@ -528,6 +627,21 @@ const styles = StyleSheet.create({
   },
   slotStatusTextActive: {
     color: '#F5A623'
+  },
+  errorBanner: {
+    backgroundColor: '#450A0A',
+    borderColor: '#7F1D1D',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  errorBannerText: {
+    color: '#F87171',
+    fontSize: 13,
+    flex: 1
   },
   buttonRow: {
     flexDirection: 'row',
