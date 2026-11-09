@@ -1,11 +1,11 @@
 import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { conflict, forbidden, notFound } from '../lib/http';
+import { badRequest, conflict, forbidden, notFound } from '../lib/http';
 import { getPaymentGateway } from '../lib/payments';
-import { paymentsConfig, splitAmount } from '../config/payments';
+import { artistShareAfterRefund, customerRefundPercent, paymentsConfig, splitAmount } from '../config/payments';
 import { BookingStatus, PaymentStatus } from '../types';
-import { BookingService } from './booking.service';
+import { BookingService, computeEventEnd, computeEventStart, releaseSlotsIfFree } from './booking.service';
 
 export interface CheckoutDetails {
   orderId: string;
@@ -322,7 +322,277 @@ export class PaymentService {
       paymentDueAt: booking.paymentDueAt
     };
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // Settlement: releasing payouts and refunding, reconciled against the gateway
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Moves a paid booking's money to where its final status says it should be: the booker gets
+   * `refundTargetPaise` back and the artist keeps the rest minus the proportional fee.
+   *
+   * Idempotent and race-safe: a per-booking advisory lock serialises settlements, and each step
+   * compares against what Razorpay says already happened (refunded so far, reversed so far, hold
+   * state) rather than our own records, so a retry after a partial failure only does what's left.
+   * The payment leaves CAPTURED only when everything succeeded; otherwise the sweep retries.
+   */
+  static async settleBooking(bookingId: number): Promise<'SETTLED' | 'PENDING' | 'NOTHING'> {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${SETTLE_LOCK_NAMESPACE}::int4, ${bookingId}::int4)) AS l`;
+
+          const booking = await tx.booking.findUnique({ where: { id: bookingId }, include: { payment: true } });
+          const payment = booking?.payment;
+          if (!booking || !payment || payment.status !== PaymentStatus.CAPTURED || !payment.gatewayPaymentId) {
+            return 'NOTHING';
+          }
+          if (!SETTLE_STATUSES.includes(booking.status as BookingStatus)) return 'NOTHING';
+
+          const gateway = getPaymentGateway();
+          const refundTarget = Math.min(Math.max(payment.refundTargetPaise, 0), payment.amountPaise);
+          const artistFinal = artistShareAfterRefund(payment, refundTarget);
+
+          const transferId = payment.gatewayTransferId ?? (await gateway.fetchHeldTransferId(payment.gatewayPaymentId));
+          if (!transferId) {
+            console.warn(`Settlement for booking ${bookingId} waiting: the held transfer doesn't exist yet`);
+            return 'PENDING';
+          }
+          const transfer = await gateway.fetchTransfer(transferId);
+
+          // 1. Pull back whatever the artist shouldn't keep (before refunding from our balance)
+          const toReverse = transfer.amountPaise - transfer.reversedPaise - artistFinal;
+          if (toReverse > 0) await gateway.reverseTransfer(transferId, toReverse);
+
+          // 2. Refund the booker whatever they're still owed
+          const alreadyRefunded = await gateway.fetchRefundedPaise(payment.gatewayPaymentId);
+          if (refundTarget > alreadyRefunded) await gateway.refund(payment.gatewayPaymentId, refundTarget - alreadyRefunded);
+
+          // 3. Let the artist's remaining share settle
+          if (artistFinal > 0 && transfer.onHold) await gateway.releaseTransfer(transferId);
+
+          const status =
+            refundTarget === 0
+              ? PaymentStatus.RELEASED
+              : refundTarget >= payment.amountPaise
+                ? PaymentStatus.REFUNDED
+                : PaymentStatus.PARTIALLY_REFUNDED;
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: { status, refundedPaise: refundTarget, gatewayTransferId: transferId }
+          });
+          return 'SETTLED';
+        },
+        { timeout: 60_000, maxWait: 30_000 }
+      );
+    } catch (err) {
+      console.error(`Settlement for booking ${bookingId} failed; the sweep will retry:`, err);
+      return 'PENDING';
+    }
+  }
+
+  /** Sweep: settles every paid booking that has reached a final status but isn't settled yet. */
+  static async settlePendingPayments(): Promise<number> {
+    const pending = await prisma.payment.findMany({
+      where: { status: PaymentStatus.CAPTURED, booking: { status: { in: SETTLE_STATUSES } } },
+      select: { bookingId: true }
+    });
+    let settled = 0;
+    for (const { bookingId } of pending) {
+      if ((await PaymentService.settleBooking(bookingId)) === 'SETTLED') settled += 1;
+    }
+    return settled;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Cancellations, disputes and admin rulings
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * The booker or the artist cancels before the event starts. Artist cancellations refund 100%;
+   * booker cancellations follow CUSTOMER_CANCELLATION_POLICY. The night is released either way.
+   */
+  static async cancelBooking(bookingId: number, userId: number, reason?: string, now: Date = new Date()) {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { artist: true, slot: true, payment: true }
+    });
+    if (!booking) {
+      throw notFound('Booking not found');
+    }
+    const isCustomer = booking.customerId === userId;
+    const isArtist = booking.artist.userId === userId;
+    if (!isCustomer && !isArtist) {
+      throw forbidden('Only the booker or the artist can cancel this booking');
+    }
+    if (!CANCELLABLE_STATUSES.includes(booking.status as BookingStatus)) {
+      throw conflict(`Cannot cancel a booking with status ${booking.status}`);
+    }
+    const eventStart = computeEventStart(booking.slot);
+    if (now >= eventStart) {
+      throw conflict('The event has already started. Use "Report a problem" instead.');
+    }
+
+    const paid = booking.status === BookingStatus.CONFIRMED;
+    const payment = booking.payment;
+    let refundTarget = 0;
+    if (payment) {
+      if (!paid) {
+        // Not paid yet: anything that still lands on this order goes straight back
+        refundTarget = payment.amountPaise;
+      } else if (isArtist) {
+        refundTarget = payment.amountPaise;
+      } else {
+        const hoursBefore = (eventStart.getTime() - now.getTime()) / HOUR_MS;
+        refundTarget = Math.round((payment.amountPaise * customerRefundPercent(hoursBefore)) / 100);
+      }
+    }
+
+    const newStatus = isArtist ? BookingStatus.CANCELLED_BY_ARTIST : BookingStatus.CANCELLED_BY_CUSTOMER;
+    await prisma.$transaction(async (tx) => {
+      const { count } = await tx.booking.updateMany({
+        where: { id: bookingId, status: booking.status },
+        data: { status: newStatus, cancelledAt: now, cancellationReason: reason ?? null }
+      });
+      if (count === 0) {
+        throw conflict('This booking just changed. Refresh and try again.');
+      }
+      if (payment) {
+        await tx.payment.update({ where: { id: payment.id }, data: { refundTargetPaise: refundTarget } });
+      }
+      await releaseSlotsIfFree(tx, [booking.slotId]);
+    });
+
+    if (paid) await PaymentService.settleBooking(bookingId);
+
+    return {
+      booking: await prisma.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { payment: true, slot: true } }),
+      refundPaise: paid ? refundTarget : 0
+    };
+  }
+
+  /**
+   * The booker reports a problem with a paid gig, from the event start until the dispute window
+   * after it ends. The money stays held and auto-completion stops until an admin rules.
+   */
+  static async openDispute(bookingId: number, customerId: number, reason: string, now: Date = new Date()) {
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { slot: true } });
+    if (!booking) {
+      throw notFound('Booking not found');
+    }
+    if (booking.customerId !== customerId) {
+      throw forbidden('Only the booker can report a problem with this booking');
+    }
+    if (booking.status === BookingStatus.DISPUTED) {
+      throw conflict('A problem has already been reported for this booking');
+    }
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw conflict(`Cannot report a problem on a booking with status ${booking.status}`);
+    }
+    const eventStart = computeEventStart(booking.slot);
+    const eventEnd = booking.eventEndsAt ?? computeEventEnd(booking.slot);
+    const windowEnd = new Date(eventEnd.getTime() + paymentsConfig().disputeWindowHours * HOUR_MS);
+    if (now < eventStart) {
+      throw conflict('You can report a problem once the event has started. Before that, you can cancel.');
+    }
+    if (now > windowEnd) {
+      throw conflict('The window to report a problem with this gig has closed');
+    }
+
+    const { count } = await prisma.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.CONFIRMED },
+      data: { status: BookingStatus.DISPUTED, disputeReason: reason, disputedAt: now }
+    });
+    if (count === 0) {
+      throw conflict('This booking just changed. Refresh and try again.');
+    }
+    return prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+  }
+
+  /** Admin: open disputes, oldest first, with what's needed to decide. */
+  static async listDisputes() {
+    return prisma.booking.findMany({
+      where: { status: BookingStatus.DISPUTED },
+      include: {
+        artist: { select: { id: true, artistName: true, userId: true } },
+        customer: { select: { id: true, name: true, venueName: true, email: true, phone: true } },
+        slot: true,
+        payment: true,
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          include: { sender: { select: { id: true, name: true, role: true } } }
+        }
+      },
+      orderBy: { disputedAt: 'asc' }
+    });
+  }
+
+  /**
+   * Admin: rules on a dispute. PAY_ARTIST completes the gig; REFUND gives the booker everything
+   * back; SPLIT completes the gig with `refundPaise` going back to the booker.
+   */
+  static async resolveDispute(bookingId: number, outcome: unknown, refundPaise?: unknown) {
+    if (outcome !== 'PAY_ARTIST' && outcome !== 'REFUND' && outcome !== 'SPLIT') {
+      throw badRequest('outcome must be PAY_ARTIST, REFUND or SPLIT');
+    }
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { payment: true } });
+    if (!booking) {
+      throw notFound('Booking not found');
+    }
+    if (booking.status !== BookingStatus.DISPUTED || !booking.payment) {
+      throw conflict(`Cannot resolve a booking with status ${booking.status}`);
+    }
+    const amount = booking.payment.amountPaise;
+
+    let refundTarget = 0;
+    if (outcome === 'REFUND') {
+      refundTarget = amount;
+    } else if (outcome === 'SPLIT') {
+      if (typeof refundPaise !== 'number' || !Number.isSafeInteger(refundPaise) || refundPaise <= 0 || refundPaise >= amount) {
+        throw badRequest(`refundPaise must be a whole number of paise between 1 and ${amount - 1}`);
+      }
+      refundTarget = refundPaise;
+    }
+
+    const now = new Date();
+    const newStatus = outcome === 'REFUND' ? BookingStatus.REFUNDED : BookingStatus.COMPLETED;
+    await prisma.$transaction(async (tx) => {
+      const { count } = await tx.booking.updateMany({
+        where: { id: bookingId, status: BookingStatus.DISPUTED },
+        data: {
+          status: newStatus,
+          resolution: outcome,
+          resolvedAt: now,
+          ...(newStatus === BookingStatus.COMPLETED ? { completedAt: now } : {})
+        }
+      });
+      if (count === 0) {
+        throw conflict('This dispute has already been resolved');
+      }
+      await tx.payment.update({ where: { id: booking.payment!.id }, data: { refundTargetPaise: refundTarget } });
+    });
+
+    await PaymentService.settleBooking(bookingId);
+    return prisma.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { payment: true } });
+  }
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+/** Arbitrary namespace for settlement advisory locks (the booking id is the second key). */
+const SETTLE_LOCK_NAMESPACE = 7311;
+/** Final booking statuses whose money should be released and/or refunded. */
+const SETTLE_STATUSES: BookingStatus[] = [
+  BookingStatus.COMPLETED,
+  BookingStatus.CANCELLED_BY_ARTIST,
+  BookingStatus.CANCELLED_BY_CUSTOMER,
+  BookingStatus.REFUNDED
+];
+/** Bookings that can still be cancelled (before the event starts). */
+const CANCELLABLE_STATUSES: BookingStatus[] = [
+  BookingStatus.ACCEPTED,
+  BookingStatus.AWAITING_PAYMENT,
+  BookingStatus.CONFIRMED
+];
 
 function isCapturedEntity(entity: any): entity is CapturedPaymentEntity {
   return (

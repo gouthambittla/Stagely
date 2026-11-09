@@ -1,6 +1,13 @@
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
-import { CreateHeldOrderInput, GatewayOrder, GatewayPayment, GatewayPaymentStatus, PaymentGateway } from './gateway';
+import {
+  CreateHeldOrderInput,
+  GatewayOrder,
+  GatewayPayment,
+  GatewayPaymentStatus,
+  GatewayTransfer,
+  PaymentGateway
+} from './gateway';
 import { safeEqualHex } from './fake.gateway';
 
 export interface RazorpayCredentials {
@@ -72,6 +79,21 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     const res = await this.client.payments.fetchTransfer(paymentId);
     const items = (res as { items?: Array<{ id: string }> }).items ?? [];
     return items[0]?.id ?? null;
+  }
+
+  async fetchTransfer(transferId: string): Promise<GatewayTransfer> {
+    const t = await this.client.transfers.fetch(transferId);
+    return {
+      id: t.id,
+      amountPaise: Number(t.amount),
+      reversedPaise: Number(t.amount_reversed ?? 0),
+      onHold: Boolean(t.on_hold)
+    };
+  }
+
+  async fetchRefundedPaise(paymentId: string): Promise<number> {
+    const p = await this.client.payments.fetch(paymentId);
+    return Number(p.amount_refunded ?? 0);
   }
 
   async releaseTransfer(transferId: string): Promise<void> {

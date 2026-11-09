@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { CreateHeldOrderInput, GatewayOrder, GatewayPayment, PaymentGateway } from './gateway';
+import { CreateHeldOrderInput, GatewayOrder, GatewayPayment, GatewayTransfer, PaymentGateway } from './gateway';
 
 export const FAKE_WEBHOOK_SECRET = 'fake_webhook_secret';
 
@@ -31,6 +31,12 @@ export class FakePaymentGateway implements PaymentGateway {
   readonly transfers = new Map<string, FakeTransfer>();
   readonly refunds: Array<{ id: string; paymentId: string; amountPaise: number }> = [];
   private seq = 0;
+  /** Tests: simulate network round-trips so concurrent callers really interleave. */
+  latencyMs = 0;
+
+  private async network(): Promise<void> {
+    if (this.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
+  }
 
   private nextId(prefix: string): string {
     this.seq += 1;
@@ -38,6 +44,7 @@ export class FakePaymentGateway implements PaymentGateway {
   }
 
   async createOrderWithHeldTransfer(input: CreateHeldOrderInput): Promise<GatewayOrder> {
+    await this.network();
     const order: FakeOrder = {
       id: this.nextId('order'),
       amountPaise: input.amountPaise,
@@ -73,29 +80,46 @@ export class FakePaymentGateway implements PaymentGateway {
   }
 
   async fetchPayment(paymentId: string): Promise<GatewayPayment> {
+    await this.network();
     const payment = this.payments.get(paymentId);
     if (!payment) throw new Error(`Unknown fake payment ${paymentId}`);
     return { ...payment };
   }
 
   async fetchOrderPayments(orderId: string): Promise<GatewayPayment[]> {
+    await this.network();
     return [...this.payments.values()].filter((p) => p.orderId === orderId).map((p) => ({ ...p }));
   }
 
   async fetchHeldTransferId(paymentId: string): Promise<string | null> {
+    await this.network();
     for (const t of this.transfers.values()) {
       if (t.paymentId === paymentId) return t.id;
     }
     return null;
   }
 
+  async fetchTransfer(transferId: string): Promise<GatewayTransfer> {
+    await this.network();
+    const t = this.transfers.get(transferId);
+    if (!t) throw new Error(`Unknown fake transfer ${transferId}`);
+    return { id: t.id, amountPaise: t.amountPaise, reversedPaise: t.reversedPaise, onHold: t.onHold };
+  }
+
+  async fetchRefundedPaise(paymentId: string): Promise<number> {
+    await this.network();
+    return this.refunds.filter((r) => r.paymentId === paymentId).reduce((sum, r) => sum + r.amountPaise, 0);
+  }
+
   async releaseTransfer(transferId: string): Promise<void> {
+    await this.network();
     const t = this.transfers.get(transferId);
     if (!t) throw new Error(`Unknown fake transfer ${transferId}`);
     t.onHold = false;
   }
 
   async reverseTransfer(transferId: string, amountPaise?: number): Promise<void> {
+    await this.network();
     const t = this.transfers.get(transferId);
     if (!t) throw new Error(`Unknown fake transfer ${transferId}`);
     const remaining = t.amountPaise - t.reversedPaise;
@@ -105,6 +129,7 @@ export class FakePaymentGateway implements PaymentGateway {
   }
 
   async refund(paymentId: string, amountPaise: number, opts: { reverseAllTransfers?: boolean } = {}): Promise<{ id: string }> {
+    await this.network();
     const payment = this.payments.get(paymentId);
     if (!payment) throw new Error(`Unknown fake payment ${paymentId}`);
     const refunded = this.refunds

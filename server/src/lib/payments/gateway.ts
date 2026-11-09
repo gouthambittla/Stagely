@@ -30,6 +30,13 @@ export interface GatewayPayment {
   status: GatewayPaymentStatus;
 }
 
+export interface GatewayTransfer {
+  id: string;
+  amountPaise: number;
+  reversedPaise: number;
+  onHold: boolean;
+}
+
 export interface PaymentGateway {
   readonly name: 'razorpay' | 'fake';
   /** Public key the checkout page needs. Safe to send to clients. */
@@ -41,6 +48,10 @@ export interface PaymentGateway {
   fetchOrderPayments(orderId: string): Promise<GatewayPayment[]>;
   /** The held transfer created from this payment's order, if it exists yet. */
   fetchHeldTransferId(paymentId: string): Promise<string | null>;
+  /** Current state of a transfer: settlement reconciles against this, not our own records. */
+  fetchTransfer(transferId: string): Promise<GatewayTransfer>;
+  /** Total refunded on a payment so far, according to the gateway. */
+  fetchRefundedPaise(paymentId: string): Promise<number>;
   /** Lifts the hold so the artist's share settles. */
   releaseTransfer(transferId: string): Promise<void>;
   /** Pulls the artist's share (or part of it) back to Stagely's account before a refund. */

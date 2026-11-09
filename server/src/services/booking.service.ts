@@ -38,6 +38,14 @@ export function computeOfferExpiry(slot: { date: string; startTime: string }, no
  */
 export const AUTO_COMPLETE_AFTER_HOURS = paymentsConfig().disputeWindowHours;
 
+/** Bookings the booker can mark completed (and that auto-complete): offline-settled or paid. */
+const COMPLETABLE_STATUSES: BookingStatus[] = [BookingStatus.ACCEPTED, BookingStatus.CONFIRMED];
+
+/** When the gig starts: the slot's date + startTime, read as IST. */
+export function computeEventStart(slot: { date: string; startTime: string }): Date {
+  return new Date(`${slot.date}T${slot.startTime}:00${MARKET_UTC_OFFSET}`);
+}
+
 /**
  * Once the artist accepts, the booker has PAYMENT_WINDOW_HOURS to pay, but never past the
  * event start (an unpaid gig must not go ahead).
@@ -52,7 +60,7 @@ export function computePaymentDue(slot: { date: string; startTime: string }, now
 }
 
 /** Frees each slot's night unless some other live booking still holds it. */
-async function releaseSlotsIfFree(tx: Prisma.TransactionClient, slotIds: number[]): Promise<void> {
+export async function releaseSlotsIfFree(tx: Prisma.TransactionClient, slotIds: number[]): Promise<void> {
   for (const slotId of [...new Set(slotIds)]) {
     const stillHeld = await tx.booking.findFirst({
       where: { slotId, status: { in: NIGHT_HOLDING_STATUSES } }
@@ -304,13 +312,15 @@ export class BookingService {
   }
 
   /**
-   * Completes ACCEPTED bookings whose event ended more than AUTO_COMPLETE_AFTER_HOURS ago.
+   * Completes ACCEPTED (offline) and CONFIRMED (paid) bookings whose event ended more than
+   * AUTO_COMPLETE_AFTER_HOURS ago. DISPUTED bookings wait for an admin. Payouts for the paid
+   * ones are released by PaymentService.settlePendingPayments (the sweep).
    * Safe to call often (lazily on reads and from the sweep). Returns the number completed.
    */
   static async autoCompleteFinishedBookings(now: Date = new Date()): Promise<number> {
     const cutoff = new Date(now.getTime() - AUTO_COMPLETE_AFTER_HOURS * HOUR_MS);
     const { count } = await prisma.booking.updateMany({
-      where: { status: BookingStatus.ACCEPTED, eventEndsAt: { lte: cutoff } },
+      where: { status: { in: COMPLETABLE_STATUSES }, eventEndsAt: { lte: cutoff } },
       data: { status: BookingStatus.COMPLETED, completedAt: now }
     });
     return count;
@@ -325,7 +335,7 @@ export class BookingService {
     if (booking.customerId !== customerId) {
       throw forbidden('Only the booker can mark this gig as completed');
     }
-    if (booking.status !== BookingStatus.ACCEPTED) {
+    if (!COMPLETABLE_STATUSES.includes(booking.status as BookingStatus)) {
       throw conflict(`Cannot complete a booking with status ${booking.status}`);
     }
     const eventEndsAt = booking.eventEndsAt ?? computeEventEnd(booking.slot);
@@ -335,7 +345,7 @@ export class BookingService {
 
     // Conditional on status so a concurrent auto-complete or double tap can't apply twice
     const { count } = await prisma.booking.updateMany({
-      where: { id: bookingId, status: BookingStatus.ACCEPTED },
+      where: { id: bookingId, status: { in: COMPLETABLE_STATUSES } },
       data: { status: BookingStatus.COMPLETED, completedAt: now, eventEndsAt }
     });
     if (count === 0) {

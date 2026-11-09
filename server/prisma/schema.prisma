@@ -72,24 +72,30 @@ model AvailabilitySlot {
 }
 
 model Booking {
-  id            Int              @id @default(autoincrement())
-  customerId    Int
-  customer      User             @relation("CustomerBookings", fields: [customerId], references: [id])
-  artistId      Int
-  artist        ArtistProfile    @relation("ArtistBookings", fields: [artistId], references: [id])
-  slotId        Int
-  slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
-  eventType     String
-  eventLocation String
-  status        String           @default("REQUESTED") // see BookingStatus in src/types (ACCEPTED -> COMPLETED by booker or 48h after eventEndsAt)
-  notes         String?
-  expiresAt     DateTime? // REQUESTED offers auto-expire (and release the slot) after this instant
-  eventEndsAt   DateTime? // slot date + endTime (IST), computed once at request time
-  completedAt   DateTime?
-  amountPaise   Int? // fee locked when the booker requests (artist.baseFee * 100)
-  paymentDueAt  DateTime? // AWAITING_PAYMENT deadline
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                 Int              @id @default(autoincrement())
+  customerId         Int
+  customer           User             @relation("CustomerBookings", fields: [customerId], references: [id])
+  artistId           Int
+  artist             ArtistProfile    @relation("ArtistBookings", fields: [artistId], references: [id])
+  slotId             Int
+  slot               AvailabilitySlot @relation(fields: [slotId], references: [id])
+  eventType          String
+  eventLocation      String
+  status             String           @default("REQUESTED") // see BookingStatus in src/types (ACCEPTED -> COMPLETED by booker or 48h after eventEndsAt)
+  notes              String?
+  expiresAt          DateTime? // REQUESTED offers auto-expire (and release the slot) after this instant
+  eventEndsAt        DateTime? // slot date + endTime (IST), computed once at request time
+  completedAt        DateTime?
+  amountPaise        Int? // fee locked when the booker requests (artist.baseFee * 100)
+  paymentDueAt       DateTime? // AWAITING_PAYMENT deadline
+  cancelledAt        DateTime?
+  cancellationReason String?
+  disputedAt         DateTime?
+  disputeReason      String?
+  resolution         String? // admin ruling on a dispute: PAY_ARTIST, REFUND, SPLIT
+  resolvedAt         DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   messages Message[]
   review   Review?
@@ -116,6 +122,9 @@ model Payment {
   platformFeePaise  Int
   status            String // CREATED, CAPTURED, RELEASED, REFUNDED, PARTIALLY_REFUNDED, FAILED
   refundedPaise     Int      @default(0)
+  // What the booker is owed back once settled (set by cancellation or dispute ruling). Settlement
+  // reconciles Razorpay towards this; the artist gets the rest minus the proportional fee.
+  refundTargetPaise Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
