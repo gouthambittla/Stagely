@@ -37,7 +37,7 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
   requests: propRequests,
   onAccept: propOnAccept
 }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [requests, setRequests] = useState<any[]>(propRequests || []);
   const [loading, setLoading] = useState<boolean>(!propRequests);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -62,6 +62,8 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
   useEffect(() => {
     if (!propRequests) {
       fetchArtistBookings();
+      // Pull the latest profile so verification status and edits made elsewhere show up
+      refreshUser().catch(() => {});
     }
   }, []);
 
@@ -263,6 +265,7 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
               onRefresh={() => {
                 setRefreshing(true);
                 fetchArtistBookings();
+                refreshUser().catch(() => {});
               }}
               tintColor="#F5A623"
             />

@@ -35,10 +35,27 @@ interface ArtistDetailScreenProps {
 }
 
 export const ArtistDetailScreen: React.FC<ArtistDetailScreenProps> = ({
-  artist,
+  artist: initialArtist,
   onBack,
   onBookingSuccess
 }) => {
+  // The list item passed in is a snapshot from the Explore search; load the live profile so
+  // the artist's latest edits (fee, bio, rider, availability) are what the booker sees.
+  const [artist, setArtist] = useState<any>(initialArtist);
+  useEffect(() => {
+    let cancelled = false;
+    api.getArtistById(initialArtist.id)
+      .then(res => {
+        if (!cancelled && res?.artist) {
+          setArtist({ ...initialArtist, ...res.artist });
+        }
+      })
+      .catch(err => console.warn('Could not refresh artist profile:', err?.message || err));
+    return () => {
+      cancelled = true;
+    };
+  }, [initialArtist.id]);
+
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState<boolean>(false);
   const [eventType, setEventType] = useState<string>('Pub Live Band');

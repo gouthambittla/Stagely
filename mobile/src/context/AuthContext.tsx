@@ -54,6 +54,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncBackendUser = async (fbUser: FirebaseUser) => {
     try {
       const idToken = await getIdToken(fbUser);
+      if (!idToken) {
+        throw new Error('Unable to obtain an authentication token');
+      }
       const res = await api.syncFirebaseUser(idToken);
       if (res.isNewUser) {
         setUser(null);
@@ -62,8 +65,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(res.user);
         setIsNewUser(false);
       }
-    } catch (err) {
-      console.error('Failed to sync Firebase user with backend:', err);
+    } catch (err: any) {
+      // Avoid logging full error objects (may include response bodies) in release builds
+      console.error('Failed to sync Firebase user with backend:', __DEV__ ? err : err?.message);
       setUser(null);
       setIsNewUser(false);
     } finally {
@@ -119,6 +123,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('No authenticated Firebase session found');
     }
     const idToken = await getIdToken(firebaseUser);
+    if (!idToken) {
+      throw new Error('Your session has expired. Please sign in again.');
+    }
     const res = await api.completeSignup({
       idToken,
       role,

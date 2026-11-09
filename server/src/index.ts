@@ -1,17 +1,18 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { loadEnv } from './config/env';
+
+// Fail fast on bad configuration before anything connects or listens.
+const env = loadEnv();
+
 import app from './app';
+import { prisma } from './lib/prisma';
 import { BookingService } from './services/booking.service';
 
-const PORT = Number(process.env.PORT) || 5000;
-
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Stagely API server is running on http://0.0.0.0:${PORT}`);
-  console.log(`   Local: http://localhost:${PORT}`);
-  console.log(`   LAN:   http://192.168.1.37:${PORT}`);
-  console.log(`   Health check: http://192.168.1.37:${PORT}/health`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+const server = app.listen(env.PORT, '0.0.0.0', () => {
+  console.log(`🚀 Stagely API listening on port ${env.PORT} (${env.NODE_ENV})`);
+  console.log(`   Health: /health   Readiness: /ready`);
 });
 
 // Background sweep: expire unanswered booking offers so their nights reopen even with no traffic.
@@ -26,20 +27,46 @@ const offerSweep = setInterval(() => {
 }, OFFER_SWEEP_INTERVAL_MS);
 offerSweep.unref();
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed.');
-    process.exit(0);
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let shuttingDown = false;
+
+function shutdown(signal: string, exitCode = 0): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received, shutting down gracefully...`);
+
+  clearInterval(offerSweep);
+
+  // Force-exit if in-flight requests or the DB don't drain in time
+  const forceExit = setTimeout(() => {
+    console.error('Graceful shutdown timed out; forcing exit.');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExit.unref();
+
+  server.close(async (closeErr) => {
+    if (closeErr) console.error('Error closing HTTP server:', closeErr);
+    try {
+      await prisma.$disconnect();
+    } catch (err) {
+      console.error('Error disconnecting Prisma:', err);
+    }
+    console.log('Shutdown complete.');
+    process.exit(closeErr ? 1 : exitCode);
   });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed.');
-    process.exit(0);
-  });
+process.on('uncaughtException', (err) => {
+  // State may be corrupt; log, then exit so the process manager restarts us cleanly.
+  console.error('Uncaught exception:', err);
+  shutdown('uncaughtException', 1);
 });
 
 export default server;

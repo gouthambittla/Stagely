@@ -1,3 +1,4 @@
+import { notFound } from '../lib/http';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
 
@@ -24,7 +25,7 @@ export class AdminService {
 
     const artist = await prisma.artistProfile.findUnique({ where: { id: artistId } });
     if (!artist) {
-      throw new Error('Artist not found');
+      throw notFound('Artist not found');
     }
 
     const updated = await prisma.artistProfile.update({

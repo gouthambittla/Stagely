@@ -9,14 +9,20 @@
     "dev": "ts-node src/index.ts",
     "test": "jest --runInBand",
     "db:push": "prisma db push",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "firebase-admin": "^14.5.0"
+    "express-rate-limit": "^7.5.1",
+    "firebase-admin": "^14.5.0",
+    "helmet": "^8.3.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -37,5 +43,8 @@
     "testMatch": [
       "**/tests/**/*.test.ts"
     ]
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

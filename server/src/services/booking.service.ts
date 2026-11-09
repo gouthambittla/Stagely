@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { BookingStatus, VerificationStatus, UserRole } from '../types';
+import { forbidden, notFound } from '../lib/http';
 
 export interface CreateBookingInput {
   customerId: number;
@@ -88,7 +89,18 @@ export class BookingService {
         throw err;
       }
 
-      // 2. Verify slot exists and is open
+      // Serialize offers for the same artist on the same night. Without this, two concurrent
+      // requests (same slot, or different slots on one date) can both pass the checks below
+      // under READ COMMITTED. The lock is transaction-scoped and released on commit/rollback.
+      const slotForLock = await tx.availabilitySlot.findUnique({
+        where: { id: input.slotId },
+        select: { date: true }
+      });
+      if (slotForLock) {
+        await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${input.artistId}::int4, hashtext(${slotForLock.date}))) AS l`;
+      }
+
+      // 2. Verify slot exists and is open (re-read after acquiring the lock)
       const slot = await tx.availabilitySlot.findUnique({
         where: { id: input.slotId }
       });
@@ -137,11 +149,17 @@ export class BookingService {
         }
       });
 
-      // 5. Immediately lock the slot exclusively for this request
-      await tx.availabilitySlot.update({
-        where: { id: input.slotId },
+      // 5. Immediately lock the slot exclusively for this request. Conditional on the slot
+      // still being open, so a lost race fails (and rolls back) instead of double-booking.
+      const { count: locked } = await tx.availabilitySlot.updateMany({
+        where: { id: input.slotId, isBooked: false },
         data: { isBooked: true }
       });
+      if (locked !== 1) {
+        const err: any = new Error('This slot has already been booked or has an active offer');
+        err.statusCode = 409;
+        throw err;
+      }
 
       return booking;
     });
@@ -156,11 +174,11 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new Error('Booking not found');
+      throw notFound('Booking not found');
     }
 
     if (booking.artist.userId !== artistUserId) {
-      throw new Error('Unauthorized to respond to this booking');
+      throw forbidden('Unauthorized to respond to this booking');
     }
 
     if (booking.status === BookingStatus.EXPIRED) {
@@ -219,12 +237,12 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new Error('Booking not found');
+      throw notFound('Booking not found');
     }
 
     // Ensure sender is either the customer or the artist
     if (booking.customerId !== senderId && booking.artist.userId !== senderId) {
-      throw new Error('Unauthorized to post messages to this booking');
+      throw forbidden('Unauthorized to post messages to this booking');
     }
 
     const message = await prisma.message.create({
@@ -248,11 +266,11 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new Error('Booking not found');
+      throw notFound('Booking not found');
     }
 
     if (booking.customerId !== userId && booking.artist.userId !== userId) {
-      throw new Error('Unauthorized to view messages for this booking');
+      throw forbidden('Unauthorized to view messages for this booking');
     }
 
     return prisma.message.findMany({

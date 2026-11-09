@@ -111,10 +111,23 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
         availableSlots: activeSlots
       });
 
-      await refreshUser();
+      // Show the confirmation first. Refreshing the session now would make the navigator
+      // swap this screen for the dashboard before the artist ever sees it.
       setSubmitted(true);
     } catch (err: any) {
       Alert.alert('Onboarding Error', err.message || 'Failed to submit onboarding profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoToDashboard = async () => {
+    setLoading(true);
+    try {
+      await refreshUser(); // loads the new artist profile so the navigator opens the dashboard
+      onComplete();
+    } catch (err: any) {
+      Alert.alert('Almost there', err?.message || 'Could not load your dashboard. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -140,10 +153,11 @@ export const OnboardingWizardScreen: React.FC<{ onComplete: () => void }> = ({ o
 
           <TouchableOpacity
             style={styles.doneButton}
-            onPress={onComplete}
+            onPress={handleGoToDashboard}
+            disabled={loading}
             activeOpacity={0.85}
           >
-            <Text style={styles.doneButtonText}>Go to Artist Dashboard</Text>
+            <Text style={styles.doneButtonText}>{loading ? 'Opening…' : 'Go to Artist Dashboard'}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

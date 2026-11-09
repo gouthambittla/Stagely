@@ -59,3 +59,16 @@ To prevent double bookings and competing gig offers on the same night:
 3. Upon creating the booking in `REQUESTED` state, the corresponding `AvailabilitySlot` is atomically set to `isBooked = true`, removing it from the public catalog search.
 4. If an artist chooses to `DECLINE` the request, the slot is atomically reset to `isBooked = false`, reopening the night for new bookings.
 5. If the artist does not answer before `expiresAt` (48h TTL, capped at event start), `BookingService.expireStaleOffers()` marks the offer `EXPIRED` and releases the slot. Accept/decline transitions are guarded by `status = REQUESTED` in the update itself, so an offer that expires mid-response cannot be accepted.
+
+### Production Configuration & Operations
+- **Startup validation** (`server/src/config/env.ts`): the server refuses to start on invalid config. `DATABASE_URL` is required; in production, `FIREBASE_SERVICE_ACCOUNT` or `FIREBASE_PROJECT_ID` is required and `ALLOW_MOCK_AUTH=true` is rejected.
+- **Mock auth**: `mock_*` tokens are honoured only under the test runner (`NODE_ENV=test`) or with `ALLOW_MOCK_AUTH=true` in development. They are never honoured in production. The mobile auth simulator is compiled in only for `__DEV__` builds.
+- **Signup roles**: clients can self-register only as `CUSTOMER` or `ARTIST`. Admins are provisioned out-of-band.
+- **HTTP hardening**: `helmet`, rate limits (`/api/auth` 50 requests per 15 minutes, `/api` 300 per minute, per IP), CORS allowlist via `CORS_ORIGINS`, `TRUST_PROXY` for load balancers, 100kb JSON body limit, JSON 404s and a central error handler. 5xx responses never include internal error text.
+- **Logging**: access log of method, path, status, latency and IP. Request bodies are never logged.
+- **Probes**: `GET /health` (liveness) and `GET /ready` (DB `SELECT 1`, returns 503 when unavailable).
+- **Shutdown**: SIGTERM/SIGINT stop accepting connections, clear the offer-expiry sweep and disconnect Prisma, with a 10s forced exit if draining stalls.
+- **Database**: deploy with `npm run db:migrate` (`prisma migrate deploy`). Migrations live in `server/prisma/migrations` (baseline `0_init`). For an existing database created with `db push`, baseline it once with `npx prisma migrate resolve --applied 0_init`.
+- **Concurrency**: booking creation takes a Postgres transaction-scoped advisory lock per artist and date, and locks the slot with a conditional update. Two simultaneous requests can never both hold the same night.
+- **Mobile builds**: `mobile/eas.json` defines development, preview and production profiles. Release builds require an https `EXPO_PUBLIC_API_URL` and fail fast without one.
+- **CI** (`.github/workflows/ci.yml`): server typecheck, then migrate, seed and the full Jest suite against Postgres 16; mobile typecheck.
