@@ -58,6 +58,16 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     };
   }
 
+  async fetchOrderPayments(orderId: string): Promise<GatewayPayment[]> {
+    const res = await this.client.orders.fetchPayments(orderId);
+    return (res.items ?? []).map((p) => ({
+      id: p.id,
+      orderId: String(p.order_id),
+      amountPaise: Number(p.amount),
+      status: p.status as GatewayPaymentStatus
+    }));
+  }
+
   async fetchHeldTransferId(paymentId: string): Promise<string | null> {
     const res = await this.client.payments.fetchTransfer(paymentId);
     const items = (res as { items?: Array<{ id: string }> }).items ?? [];
@@ -76,8 +86,11 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     }
   }
 
-  async refund(paymentId: string, amountPaise: number): Promise<{ id: string }> {
-    const refund = await this.client.payments.refund(paymentId, { amount: amountPaise });
+  async refund(paymentId: string, amountPaise: number, opts: { reverseAllTransfers?: boolean } = {}): Promise<{ id: string }> {
+    const refund = await this.client.payments.refund(
+      paymentId,
+      opts.reverseAllTransfers ? { amount: amountPaise, reverse_all: 1 } : { amount: amountPaise }
+    );
     return { id: refund.id };
   }
 

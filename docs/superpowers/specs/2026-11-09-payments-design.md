@@ -303,16 +303,17 @@ Each phase is a separate PR, test-driven (failing test first), and keeps `npm te
 - [x] Note: `createLinkedAccount` moves to Phase 5 with the onboarding work that uses it.
 
 ### Phase 3: Webhooks and confirmation
-- [ ] Mount the webhook route with `express.raw()` before `express.json()` in `app.ts`.
-- [ ] Signature verification, event deduplication through `PaymentEvent`, and an amount check.
-- [ ] `payment.captured` → `CONFIRMED`. `payment.failed` → stays `AWAITING_PAYMENT`.
-- [ ] A capture that arrives after the booking is `PAYMENT_EXPIRED` (the booker paid at the last second) is refunded in full automatically, because the night may already be someone else's.
-- [ ] `GET /bookings/:id/payment-status`, with a server-side fetch as a fallback.
-- [ ] Tests:
+- [x] Mount the webhook route with `express.raw()` before `express.json()` in `app.ts`.
+- [x] Signature verification, event deduplication through `PaymentEvent`, and an amount check.
+- [x] `payment.captured` → `CONFIRMED`. `payment.failed` → stays `AWAITING_PAYMENT`.
+- [x] A capture that arrives after the booking is `PAYMENT_EXPIRED` (the booker paid at the last second) is refunded in full automatically, because the night may already be someone else's.
+- [x] `GET /bookings/:id/payment-status`, with a server-side fetch as a fallback.
+- [x] Tests:
   - A bad signature returns 401 and changes nothing.
   - A replayed event is a no-op.
   - A wrong amount is not confirmed.
   - Concurrent duplicate webhooks confirm the booking only once.
+- [x] Also handled: `order.paid` (same as `payment.captured`), `transfer.processed` stores the held transfer id, a second payment on an already-paid order is refunded, and failed late-payment refunds are retried by the sweep.
 
 ### Phase 4: Release, disputes, cancellations and refunds
 - [ ] Completion (manual and the 48-hour sweep) releases the held transfer. Failed releases are retried by the sweep.

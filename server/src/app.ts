@@ -6,6 +6,7 @@ import adminRoutes from './routes/admin.routes';
 import discoveryRoutes from './routes/discovery.routes';
 import bookingRoutes from './routes/booking.routes';
 import userRoutes from './routes/users.routes';
+import webhookRoutes from './routes/webhook.routes';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { prisma } from './lib/prisma';
@@ -27,6 +28,10 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .map((o) => o.trim())
   .filter(Boolean);
 app.use(cors(corsOrigins.length > 0 ? { origin: corsOrigins } : undefined));
+
+// Payment webhooks need the raw body for signature checks, so they're mounted before the JSON
+// parser. They're also outside the /api rate limiter: Razorpay delivers in bursts from few IPs.
+app.use('/api/webhooks', webhookRoutes);
 
 app.use(express.json({ limit: '100kb' }));
 

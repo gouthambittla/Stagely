@@ -76,6 +76,17 @@ router.post('/:id/pay', requireRole([UserRole.CUSTOMER]), async (req: Authentica
   }
 });
 
+// GET /api/bookings/:id/payment-status - Booker or artist checks payment (the app polls after checkout)
+router.get('/:id/payment-status', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseId(req.params.id, 'booking id');
+    const status = await PaymentService.getPaymentStatus(bookingId, req.user!.id);
+    res.status(200).json(status);
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 // POST /api/bookings/:id/complete - Booker confirms the gig happened (after the event ends)
 router.post('/:id/complete', requireRole([UserRole.CUSTOMER]), async (req: AuthenticatedRequest, res: Response) => {
   try {
