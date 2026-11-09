@@ -92,7 +92,33 @@ router.post('/:id/complete', requireRole([UserRole.CUSTOMER]), async (req: Authe
   try {
     const bookingId = parseId(req.params.id, 'booking id');
     const booking = await BookingService.completeBooking(bookingId, req.user!.id);
+    // Paid gigs: release the artist's payout now (a failure is retried by the sweep)
+    await PaymentService.settleBooking(bookingId);
     res.status(200).json({ message: 'Booking marked as completed', booking });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+// POST /api/bookings/:id/dispute - Booker reports a problem with a paid gig (money stays held)
+router.post('/:id/dispute', requireRole([UserRole.CUSTOMER]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseId(req.params.id, 'booking id');
+    const reason = parseText(req.body?.reason, 'reason', { required: true, max: 1000 })!;
+    const booking = await PaymentService.openDispute(bookingId, req.user!.id, reason);
+    res.status(200).json({ message: 'Problem reported. Our team will review it and get back to you.', booking });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
+// POST /api/bookings/:id/cancel - Booker or artist cancels before the event (refund per policy)
+router.post('/:id/cancel', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseId(req.params.id, 'booking id');
+    const reason = parseText(req.body?.reason, 'reason', { max: 500 });
+    const { booking, refundPaise } = await PaymentService.cancelBooking(bookingId, req.user!.id, reason);
+    res.status(200).json({ message: 'Booking cancelled', booking, refundPaise });
   } catch (err) {
     sendError(res, err, 400);
   }

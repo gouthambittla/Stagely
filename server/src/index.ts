@@ -36,11 +36,17 @@ const offerSweep = setInterval(() => {
       if (count > 0) console.log(`↩️ Refunded ${count} late payment(s)`);
     })
     .catch((err) => console.error('Late payment refund sweep failed:', err));
+  // Complete first, then settle, so a gig that just auto-completed is paid out in the same tick
   BookingService.autoCompleteFinishedBookings()
     .then((count) => {
       if (count > 0) console.log(`✅ Auto-completed ${count} finished booking(s)`);
     })
-    .catch((err) => console.error('Booking auto-complete sweep failed:', err));
+    .catch((err) => console.error('Booking auto-complete sweep failed:', err))
+    .then(() => PaymentService.settlePendingPayments())
+    .then((count) => {
+      if (count) console.log(`💰 Settled ${count} payment(s) (payouts released / refunds sent)`);
+    })
+    .catch((err) => console.error('Payment settlement sweep failed:', err));
 }, OFFER_SWEEP_INTERVAL_MS);
 offerSweep.unref();
 

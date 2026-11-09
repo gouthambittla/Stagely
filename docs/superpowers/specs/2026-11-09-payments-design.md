@@ -178,7 +178,7 @@ We don't store raw bank account numbers or PAN. They go straight to Razorpay, an
 | `POST /api/webhooks/razorpay` | Razorpay | Verifies the signature, deduplicates by event ID, then handles `payment.captured`, `payment.failed`, `refund.processed` and `transfer.processed`. |
 | `GET /api/bookings/:id/payment-status` | Customer, artist | Lets the app poll after checkout. As a fallback, the server re-checks the payment with Razorpay if no webhook has arrived yet. |
 | `POST /api/bookings/:id/complete` | Customer | Allowed only when `CONFIRMED` (or legacy `ACCEPTED`) and `now >= eventEndsAt`. Leads to `COMPLETED` and releases the transfer. |
-| `POST /api/bookings/:id/dispute` | Customer | Allowed only when `CONFIRMED`, and within 48 hours after `eventEndsAt`. A reason is required. Leads to `DISPUTED`. |
+| `POST /api/bookings/:id/dispute` | Customer | Allowed only when `CONFIRMED`, from the event start until 48 hours after `eventEndsAt`. A reason is required. Leads to `DISPUTED`. |
 | `POST /api/bookings/:id/cancel` | Customer or artist | Before the event only. Refunds per §7. |
 | `GET /api/admin/disputes` | Admin | Lists disputed bookings, with the chat history. |
 | `POST /api/admin/disputes/:id/resolve` | Admin | `{ outcome: 'PAY_ARTIST' \| 'REFUND' \| 'SPLIT', refundPaise? }` |
@@ -316,16 +316,19 @@ Each phase is a separate PR, test-driven (failing test first), and keeps `npm te
 - [x] Also handled: `order.paid` (same as `payment.captured`), `transfer.processed` stores the held transfer id, a second payment on an already-paid order is refunded, and failed late-payment refunds are retried by the sweep.
 
 ### Phase 4: Release, disputes, cancellations and refunds
-- [ ] Completion (manual and the 48-hour sweep) releases the held transfer. Failed releases are retried by the sweep.
-- [ ] `POST /bookings/:id/dispute`: within the window, reason required.
-- [ ] `POST /bookings/:id/cancel` for both roles, with refunds per policy (transfer reversed first).
-- [ ] Admin: `GET /admin/disputes` and `POST /admin/disputes/:id/resolve` (pay artist, refund, or split).
-- [ ] Tests:
+- [x] Completion (manual and the 48-hour sweep) releases the held transfer. Failed releases are retried by the sweep.
+- [x] `POST /bookings/:id/dispute`: within the window, reason required.
+- [x] `POST /bookings/:id/cancel` for both roles, with refunds per policy (transfer reversed first).
+- [x] Admin: `GET /admin/disputes` and `POST /admin/disputes/:id/resolve` (pay artist, refund, or split).
+- [x] Tests:
   - No release while disputed.
   - No refund after release.
   - The policy maths in each time band.
   - Only an admin can resolve.
   - Resolving twice is refused.
+- [x] Settlement design: completion, cancellation and admin rulings only record the target (`Payment.refundTargetPaise`; the artist keeps the rest minus the proportional fee). `PaymentService.settleBooking` then reconciles Razorpay towards it under a per-booking advisory lock, comparing against what Razorpay reports as already refunded, reversed and held. Retries after a partial failure only do what's left, and the sweep retries anything not yet settled.
+- [x] Disputes open from the **event start** (not the end), so an artist no-show can be reported straight away. Cancelling is closed once the event starts.
+- [x] Cancelling an unpaid (`AWAITING_PAYMENT`) booking sets a full refund target, so a payment that still lands on its order goes straight back.
 
 ### Phase 5: Artist payouts onboarding
 - [ ] `POST /api/artists/onboard` requires payout details and creates the linked account before the profile (all or nothing).

@@ -51,10 +51,29 @@ export function splitAmount(
 /**
  * Booker cancellation refunds, by how long before the event start they cancel (confirmed
  * 2026-11-09). Bands are checked in order; the first whose `minHoursBefore` is met applies.
- * Artist cancellations always refund 100%. Used from Phase 4.
+ * Artist cancellations always refund 100%.
  */
 export const CUSTOMER_CANCELLATION_POLICY: ReadonlyArray<{ minHoursBefore: number; refundPercent: number }> = [
   { minHoursBefore: 7 * 24, refundPercent: 100 },
   { minHoursBefore: 24, refundPercent: 50 },
   { minHoursBefore: 0, refundPercent: 0 }
 ];
+
+/** Refund percentage for a booker who cancels `hoursBeforeEvent` hours before the event starts. */
+export function customerRefundPercent(hoursBeforeEvent: number): number {
+  const band = CUSTOMER_CANCELLATION_POLICY.find((b) => hoursBeforeEvent >= b.minHoursBefore);
+  return band ? band.refundPercent : 0;
+}
+
+/**
+ * What the artist keeps when the booker gets `refundPaise` back: the kept amount minus Stagely's
+ * fee on it, at the same ratio as the original split (so no refund gives exactly artistSharePaise).
+ */
+export function artistShareAfterRefund(
+  payment: { amountPaise: number; platformFeePaise: number },
+  refundPaise: number
+): number {
+  const kept = payment.amountPaise - refundPaise;
+  if (kept <= 0) return 0;
+  return kept - Math.round((kept * payment.platformFeePaise) / payment.amountPaise);
+}
