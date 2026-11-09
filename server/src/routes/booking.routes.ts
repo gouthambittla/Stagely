@@ -64,6 +64,17 @@ router.put('/:id/respond', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
+// POST /api/bookings/:id/complete - Booker confirms the gig happened (after the event ends)
+router.post('/:id/complete', requireRole([UserRole.CUSTOMER]), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const bookingId = parseId(req.params.id, 'booking id');
+    const booking = await BookingService.completeBooking(bookingId, req.user!.id);
+    res.status(200).json({ message: 'Booking marked as completed', booking });
+  } catch (err) {
+    sendError(res, err, 400);
+  }
+});
+
 // POST /api/bookings/:id/messages - Send message
 router.post('/:id/messages', async (req: AuthenticatedRequest, res: Response) => {
   try {

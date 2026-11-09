@@ -75,9 +75,11 @@ model Booking {
   slot          AvailabilitySlot @relation(fields: [slotId], references: [id])
   eventType     String
   eventLocation String
-  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, EXPIRED, COMPLETED
+  status        String           @default("REQUESTED") // REQUESTED, ACCEPTED, DECLINED, EXPIRED, COMPLETED (ACCEPTED -> COMPLETED by booker or 48h after eventEndsAt)
   notes         String?
   expiresAt     DateTime? // REQUESTED offers auto-expire (and release the slot) after this instant
+  eventEndsAt   DateTime? // slot date + endTime (IST), computed once at request time
+  completedAt   DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -88,6 +90,7 @@ model Booking {
   @@index([artistId, status])
   @@index([slotId, status])
   @@index([status, expiresAt])
+  @@index([status, eventEndsAt])
 }
 
 model Message {

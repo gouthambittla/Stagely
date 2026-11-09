@@ -89,6 +89,7 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
     const isProcessing = processingId === item.id;
     const isRequested = item.status === 'REQUESTED';
     const isAccepted = item.status === 'ACCEPTED';
+    const isCompleted = item.status === 'COMPLETED';
     const customer = item.customer || {};
     const slot = item.slot || {};
 
@@ -104,6 +105,8 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
               styles.statusBadge,
               isAccepted
                 ? styles.badgeAccepted
+                : isCompleted
+                ? styles.badgeCompleted
                 : isRequested
                 ? styles.badgeRequested
                 : styles.badgeDeclined
@@ -114,6 +117,8 @@ export const ArtistDashboardScreen: React.FC<ArtistDashboardScreenProps> = ({
                 styles.statusText,
                 isAccepted
                   ? styles.textAccepted
+                  : isCompleted
+                  ? styles.textCompleted
                   : isRequested
                   ? styles.textRequested
                   : styles.textDeclined
@@ -410,6 +415,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#451A03',
     borderColor: '#78350F'
   },
+  badgeCompleted: {
+    backgroundColor: '#1E1B4B',
+    borderColor: '#4338CA'
+  },
   badgeDeclined: {
     backgroundColor: '#450A0A',
     borderColor: '#7F1D1D'
@@ -423,6 +432,9 @@ const styles = StyleSheet.create({
   },
   textRequested: {
     color: '#F5A623'
+  },
+  textCompleted: {
+    color: '#A78BFA'
   },
   textDeclined: {
     color: '#F87171'

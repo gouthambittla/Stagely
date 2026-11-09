@@ -15,8 +15,9 @@ const server = app.listen(env.PORT, '0.0.0.0', () => {
   console.log(`   Health: /health   Readiness: /ready`);
 });
 
-// Background sweep: expire unanswered booking offers so their nights reopen even with no traffic.
-// (Reads and writes also expire lazily, so this is a backstop, not the only mechanism.)
+// Background sweep: expire unanswered booking offers so their nights reopen, and complete gigs
+// the booker never confirmed, even with no traffic.
+// (Reads and writes also do this lazily, so this is a backstop, not the only mechanism.)
 const OFFER_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const offerSweep = setInterval(() => {
   BookingService.expireStaleOffers()
@@ -24,6 +25,11 @@ const offerSweep = setInterval(() => {
       if (count > 0) console.log(`⏳ Expired ${count} unanswered booking offer(s)`);
     })
     .catch((err) => console.error('Offer expiry sweep failed:', err));
+  BookingService.autoCompleteFinishedBookings()
+    .then((count) => {
+      if (count > 0) console.log(`✅ Auto-completed ${count} finished booking(s)`);
+    })
+    .catch((err) => console.error('Booking auto-complete sweep failed:', err));
 }, OFFER_SWEEP_INTERVAL_MS);
 offerSweep.unref();
 

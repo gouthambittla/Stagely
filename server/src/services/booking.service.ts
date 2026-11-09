@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { BookingStatus, VerificationStatus, UserRole } from '../types';
-import { forbidden, notFound } from '../lib/http';
+import { conflict, forbidden, notFound } from '../lib/http';
 
 export interface CreateBookingInput {
   customerId: number;
@@ -28,6 +28,24 @@ export function computeOfferExpiry(slot: { date: string; startTime: string }, no
     return eventStart;
   }
   return ttlExpiry;
+}
+
+/**
+ * After a gig ends the booker has this long to mark it completed (or, once payments land,
+ * report a problem). After that it completes on its own, so silence never blocks the artist.
+ */
+export const AUTO_COMPLETE_AFTER_HOURS = 48;
+
+/**
+ * When the gig finishes: the slot's date + endTime, read as IST. A slot whose end time is not
+ * after its start time runs past midnight, so it ends on the following day.
+ */
+export function computeEventEnd(slot: { date: string; startTime: string; endTime: string }): Date {
+  const end = new Date(`${slot.date}T${slot.endTime}:00${MARKET_UTC_OFFSET}`);
+  if (slot.endTime <= slot.startTime) {
+    end.setTime(end.getTime() + 24 * HOUR_MS);
+  }
+  return end;
 }
 
 export class BookingService {
@@ -140,7 +158,8 @@ export class BookingService {
           eventLocation: input.eventLocation,
           notes: input.notes,
           status: BookingStatus.REQUESTED,
-          expiresAt: computeOfferExpiry(slot)
+          expiresAt: computeOfferExpiry(slot),
+          eventEndsAt: computeEventEnd(slot)
         },
         include: {
           artist: true,
@@ -230,6 +249,51 @@ export class BookingService {
     return result;
   }
 
+  /**
+   * Completes ACCEPTED bookings whose event ended more than AUTO_COMPLETE_AFTER_HOURS ago.
+   * Safe to call often (lazily on reads and from the sweep). Returns the number completed.
+   */
+  static async autoCompleteFinishedBookings(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - AUTO_COMPLETE_AFTER_HOURS * HOUR_MS);
+    const { count } = await prisma.booking.updateMany({
+      where: { status: BookingStatus.ACCEPTED, eventEndsAt: { lte: cutoff } },
+      data: { status: BookingStatus.COMPLETED, completedAt: now }
+    });
+    return count;
+  }
+
+  /** The booker confirms the gig happened. Only allowed once the event has ended. */
+  static async completeBooking(bookingId: number, customerId: number, now: Date = new Date()) {
+    const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { slot: true } });
+    if (!booking) {
+      throw notFound('Booking not found');
+    }
+    if (booking.customerId !== customerId) {
+      throw forbidden('Only the booker can mark this gig as completed');
+    }
+    if (booking.status !== BookingStatus.ACCEPTED) {
+      throw conflict(`Cannot complete a booking with status ${booking.status}`);
+    }
+    const eventEndsAt = booking.eventEndsAt ?? computeEventEnd(booking.slot);
+    if (now < eventEndsAt) {
+      throw conflict('A gig can only be marked completed after the event has ended');
+    }
+
+    // Conditional on status so a concurrent auto-complete or double tap can't apply twice
+    const { count } = await prisma.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.ACCEPTED },
+      data: { status: BookingStatus.COMPLETED, completedAt: now, eventEndsAt }
+    });
+    if (count === 0) {
+      throw conflict('This booking has already been completed');
+    }
+
+    return prisma.booking.findUniqueOrThrow({
+      where: { id: bookingId },
+      include: { artist: true, slot: true, review: true }
+    });
+  }
+
   static async addMessage(bookingId: number, senderId: number, content: string) {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
@@ -284,6 +348,7 @@ export class BookingService {
 
   static async getBookingsForUser(userId: number, role: UserRole) {
     await BookingService.expireStaleOffers();
+    await BookingService.autoCompleteFinishedBookings();
 
     if (role === UserRole.CUSTOMER) {
       return prisma.booking.findMany({
