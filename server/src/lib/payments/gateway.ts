@@ -37,13 +37,19 @@ export interface PaymentGateway {
 
   createOrderWithHeldTransfer(input: CreateHeldOrderInput): Promise<GatewayOrder>;
   fetchPayment(paymentId: string): Promise<GatewayPayment>;
+  /** Every payment attempt made against an order (used when a webhook is late). */
+  fetchOrderPayments(orderId: string): Promise<GatewayPayment[]>;
   /** The held transfer created from this payment's order, if it exists yet. */
   fetchHeldTransferId(paymentId: string): Promise<string | null>;
   /** Lifts the hold so the artist's share settles. */
   releaseTransfer(transferId: string): Promise<void>;
   /** Pulls the artist's share (or part of it) back to Stagely's account before a refund. */
   reverseTransfer(transferId: string, amountPaise?: number): Promise<void>;
-  refund(paymentId: string, amountPaise: number): Promise<{ id: string }>;
+  /**
+   * Refunds the booker. With `reverseAllTransfers`, the artist's held share is pulled back in
+   * the same call (used for full refunds before any release).
+   */
+  refund(paymentId: string, amountPaise: number, opts?: { reverseAllTransfers?: boolean }): Promise<{ id: string }>;
   /** Checks a webhook's HMAC over the exact raw request body. */
   verifyWebhookSignature(rawBody: string, signature: string): boolean;
 }

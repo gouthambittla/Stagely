@@ -78,6 +78,10 @@ export class FakePaymentGateway implements PaymentGateway {
     return { ...payment };
   }
 
+  async fetchOrderPayments(orderId: string): Promise<GatewayPayment[]> {
+    return [...this.payments.values()].filter((p) => p.orderId === orderId).map((p) => ({ ...p }));
+  }
+
   async fetchHeldTransferId(paymentId: string): Promise<string | null> {
     for (const t of this.transfers.values()) {
       if (t.paymentId === paymentId) return t.id;
@@ -100,13 +104,18 @@ export class FakePaymentGateway implements PaymentGateway {
     t.reversedPaise += amount;
   }
 
-  async refund(paymentId: string, amountPaise: number): Promise<{ id: string }> {
+  async refund(paymentId: string, amountPaise: number, opts: { reverseAllTransfers?: boolean } = {}): Promise<{ id: string }> {
     const payment = this.payments.get(paymentId);
     if (!payment) throw new Error(`Unknown fake payment ${paymentId}`);
     const refunded = this.refunds
       .filter((r) => r.paymentId === paymentId)
       .reduce((sum, r) => sum + r.amountPaise, 0);
     if (refunded + amountPaise > payment.amountPaise) throw new Error('Refund exceeds payment');
+    if (opts.reverseAllTransfers) {
+      for (const t of this.transfers.values()) {
+        if (t.paymentId === paymentId) t.reversedPaise = t.amountPaise;
+      }
+    }
     const refund = { id: this.nextId('rfnd'), paymentId, amountPaise };
     this.refunds.push(refund);
     if (refunded + amountPaise === payment.amountPaise) payment.status = 'refunded';
