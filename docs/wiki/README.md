@@ -18,5 +18,7 @@ Welcome to the **Stagely** project documentation. All AI agents, contributors, a
    - Artist Onboarding & Verification Gate
    - Request-to-Book Lifecycle
    - In-App Communication
+   - Payments Lifecycle (Razorpay Route escrow)
+   - [Razorpay Test Mode walkthrough](payments-test-mode.md)
 4. [Active Implementation Specifications](../superpowers/specs/2026-10-26-stagely-mobile-app-design.md)
    - Current active design doc and phase breakdown

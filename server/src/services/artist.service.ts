@@ -2,6 +2,8 @@ import { BookingService } from './booking.service';
 import { ReviewService } from './review.service';
 import { prisma } from '../lib/prisma';
 import { VerificationStatus } from '../types';
+import { PayoutService } from './payout.service';
+import { PayoutDetails } from '../lib/payoutValidation';
 
 export interface OnboardArtistInput {
   artistName: string;
@@ -33,15 +35,22 @@ export interface UpdateArtistInput {
 }
 
 export class ArtistService {
-  static async onboard(userId: number, input: OnboardArtistInput) {
+  /**
+   * Creates the artist's profile. With payments on, `payoutDetails` is required: the Razorpay
+   * payout account is created first, and if Razorpay rejects it no profile is created.
+   */
+  static async onboard(userId: number, input: OnboardArtistInput, payoutDetails?: PayoutDetails) {
     const existing = await prisma.artistProfile.findUnique({ where: { userId } });
     if (existing) {
       throw new Error('Artist profile already exists for this user');
     }
 
+    const payout = payoutDetails ? await PayoutService.createLinkedAccount(userId, payoutDetails) : undefined;
+
     const artistProfile = await prisma.artistProfile.create({
       data: {
         userId,
+        ...(payout ?? {}),
         artistName: input.artistName,
         category: input.category,
         genres: JSON.stringify(input.genres),

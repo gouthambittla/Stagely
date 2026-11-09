@@ -30,7 +30,8 @@ import {
   MapPin,
   ExternalLink,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  Wallet
 } from 'lucide-react-native';
 
 const CATEGORY_OPTIONS = ['Band', 'Solo Musician', 'Singer', 'DJ', 'Acoustic Duo'];
@@ -38,9 +39,11 @@ const GENRE_OPTIONS = ['Telugu Rock', 'Bollywood', 'Acoustic', 'Sufi', 'Pop', 'F
 
 interface ArtistStudioScreenProps {
   onManageSchedule?: () => void;
+  /** Only passed when payments are enabled. */
+  onOpenPayouts?: () => void;
 }
 
-export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManageSchedule }) => {
+export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManageSchedule, onOpenPayouts }) => {
   const { logout, refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -287,6 +290,26 @@ export const ArtistStudioScreen: React.FC<ArtistStudioScreenProps> = ({ onManage
               <View>
                 <Text style={styles.scheduleShortcutTitle}>15-Day Availability Schedule</Text>
                 <Text style={styles.scheduleShortcutSubtitle}>Manage open live performance dates</Text>
+              </View>
+            </View>
+            <ChevronRight size={18} color="#64748B" />
+          </TouchableOpacity>
+        )}
+
+        {/* Payout Details Shortcut */}
+        {onOpenPayouts && !isEditing && (
+          <TouchableOpacity
+            style={styles.scheduleShortcutCard}
+            onPress={onOpenPayouts}
+            activeOpacity={0.85}
+          >
+            <View style={styles.scheduleShortcutLeft}>
+              <View style={styles.scheduleIconWrap}>
+                <Wallet size={20} color="#F5A623" />
+              </View>
+              <View>
+                <Text style={styles.scheduleShortcutTitle}>Payout details</Text>
+                <Text style={styles.scheduleShortcutSubtitle}>Bank account where your earnings are paid</Text>
               </View>
             </View>
             <ChevronRight size={18} color="#64748B" />

@@ -10,6 +10,7 @@ import app from './app';
 import { prisma } from './lib/prisma';
 import { BookingService } from './services/booking.service';
 import { PaymentService } from './services/payment.service';
+import { PayoutService } from './services/payout.service';
 
 const server = app.listen(env.PORT, '0.0.0.0', () => {
   console.log(`🚀 Stagely API listening on port ${env.PORT} (${env.NODE_ENV})`);
@@ -31,6 +32,11 @@ const offerSweep = setInterval(() => {
       if (count > 0) console.log(`💸 Expired ${count} unpaid booking(s)`);
     })
     .catch((err) => console.error('Unpaid booking expiry sweep failed:', err));
+  PayoutService.refreshPendingAccounts()
+    .then((count) => {
+      if (count > 0) console.log(`🏦 ${count} artist payout account(s) changed status`);
+    })
+    .catch((err) => console.error('Payout account refresh sweep failed:', err));
   PaymentService.retryLateCaptureRefunds()
     .then((count) => {
       if (count > 0) console.log(`↩️ Refunded ${count} late payment(s)`);

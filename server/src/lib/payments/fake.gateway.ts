@@ -1,7 +1,24 @@
 import crypto from 'crypto';
-import { CreateHeldOrderInput, GatewayOrder, GatewayPayment, GatewayTransfer, PaymentGateway } from './gateway';
+import {
+  BankDetailsInput,
+  CreateHeldOrderInput,
+  GatewayOrder,
+  GatewayPayment,
+  GatewayTransfer,
+  LinkedAccount,
+  LinkedAccountInput,
+  LinkedAccountStatus,
+  PaymentGateway
+} from './gateway';
 
 export const FAKE_WEBHOOK_SECRET = 'fake_webhook_secret';
+
+interface FakeLinkedAccount extends LinkedAccount {
+  referenceId: string;
+  legalName: string;
+  accountNumber: string;
+  ifsc: string;
+}
 
 interface FakeOrder extends GatewayOrder {
   artistAccountId: string;
@@ -30,7 +47,16 @@ export class FakePaymentGateway implements PaymentGateway {
   readonly payments = new Map<string, GatewayPayment>();
   readonly transfers = new Map<string, FakeTransfer>();
   readonly refunds: Array<{ id: string; paymentId: string; amountPaise: number }> = [];
+  readonly linkedAccounts = new Map<string, FakeLinkedAccount>();
   private seq = 0;
+  /** Local dev without keys: activate payout accounts at once so artists can accept bookings. */
+  autoActivateAccounts: boolean;
+  /** Tests: make the next createLinkedAccount fail as if Razorpay rejected the details. */
+  rejectNextAccount = false;
+
+  constructor(opts: { autoActivateAccounts?: boolean } = {}) {
+    this.autoActivateAccounts = opts.autoActivateAccounts ?? false;
+  }
   /** Tests: simulate network round-trips so concurrent callers really interleave. */
   latencyMs = 0;
 
@@ -41,6 +67,47 @@ export class FakePaymentGateway implements PaymentGateway {
   private nextId(prefix: string): string {
     this.seq += 1;
     return `${prefix}_fake${Date.now().toString(36)}${this.seq}`;
+  }
+
+  async createLinkedAccount(input: LinkedAccountInput): Promise<LinkedAccount> {
+    await this.network();
+    if (this.rejectNextAccount) {
+      this.rejectNextAccount = false;
+      throw new Error('Fake gateway rejected the linked account details');
+    }
+    const account: FakeLinkedAccount = {
+      accountId: this.nextId('acc'),
+      productId: this.nextId('acc_prd'),
+      status: this.autoActivateAccounts ? 'ACTIVE' : 'PENDING',
+      referenceId: input.referenceId,
+      legalName: input.legalName,
+      accountNumber: input.accountNumber,
+      ifsc: input.ifsc
+    };
+    this.linkedAccounts.set(account.accountId, account);
+    return { accountId: account.accountId, productId: account.productId, status: account.status };
+  }
+
+  async updateLinkedAccountBank(accountId: string, productId: string, bank: BankDetailsInput): Promise<LinkedAccountStatus> {
+    await this.network();
+    const account = this.linkedAccounts.get(accountId);
+    if (!account || account.productId !== productId) throw new Error(`Unknown fake linked account ${accountId}`);
+    Object.assign(account, bank, { status: this.autoActivateAccounts ? 'ACTIVE' : 'PENDING' });
+    return account.status;
+  }
+
+  async fetchLinkedAccountStatus(accountId: string, productId: string): Promise<LinkedAccountStatus> {
+    await this.network();
+    const account = this.linkedAccounts.get(accountId);
+    if (!account || account.productId !== productId) throw new Error(`Unknown fake linked account ${accountId}`);
+    return account.status;
+  }
+
+  /** Test helper: Razorpay finishes reviewing an account. */
+  setLinkedAccountStatus(accountId: string, status: LinkedAccountStatus): void {
+    const account = this.linkedAccounts.get(accountId);
+    if (!account) throw new Error(`Unknown fake linked account ${accountId}`);
+    account.status = status;
   }
 
   async createOrderWithHeldTransfer(input: CreateHeldOrderInput): Promise<GatewayOrder> {

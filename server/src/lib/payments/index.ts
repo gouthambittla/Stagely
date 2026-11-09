@@ -22,7 +22,8 @@ export function getPaymentGateway(): PaymentGateway {
   } else if (NODE_ENV === 'production') {
     throw new Error('Razorpay credentials are required in production');
   } else {
-    gateway = new FakePaymentGateway();
+    // Local dev without keys: payout accounts activate instantly so the whole flow is usable
+    gateway = new FakePaymentGateway({ autoActivateAccounts: NODE_ENV !== 'test' });
   }
   return gateway;
 }

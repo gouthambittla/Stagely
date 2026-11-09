@@ -42,6 +42,7 @@ model ArtistProfile {
   verificationStatus String   @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
   // Payouts (Razorpay Route linked account). Raw bank account numbers and PAN are never stored.
   payoutAccountId    String? // acc_xxx
+  payoutProductId    String? // acc_prd_xxx (the Route product; holds activation status + bank details)
   payoutStatus       String   @default("NOT_STARTED") // NOT_STARTED, PENDING, ACTIVE, REJECTED
   payoutLegalName    String?
   payoutIfsc         String?

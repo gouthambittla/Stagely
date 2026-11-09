@@ -331,11 +331,11 @@ Each phase is a separate PR, test-driven (failing test first), and keeps `npm te
 - [x] Cancelling an unpaid (`AWAITING_PAYMENT`) booking sets a full refund target, so a payment that still lands on its order goes straight back.
 
 ### Phase 5: Artist payouts onboarding
-- [ ] `POST /api/artists/onboard` requires payout details and creates the linked account before the profile (all or nothing).
-- [ ] `GET`/`PUT /api/artists/payout-account`: masked view and edit. Status is updated by webhook or polling.
-- [ ] Block `ACCEPT` until `payoutStatus = ACTIVE`.
-- [ ] Mobile: a 4th **Payout details** step in `OnboardingWizardScreen` (`Artist Setup (4/4)`), a **Payout details** edit screen reachable from the artist profile, and a blocking prompt for legacy artists with `NOT_STARTED`.
-- [ ] Tests:
+- [x] `POST /api/artists/onboard` requires payout details and creates the linked account before the profile (all or nothing).
+- [x] `GET`/`PUT /api/artists/payout-account`: masked view and edit. Status is updated by webhook or polling.
+- [x] Block `ACCEPT` until `payoutStatus = ACTIVE`.
+- [x] Mobile: a 4th **Payout details** step in `OnboardingWizardScreen` (`Artist Setup (4/4)`), a **Payout details** edit screen reachable from the artist profile, and a blocking prompt for legacy artists with `NOT_STARTED`.
+- [x] Tests:
   - Onboarding without payout details is rejected (400) and creates no profile.
   - A gateway rejection during onboarding creates no profile.
   - PAN and IFSC format validation.
@@ -343,17 +343,27 @@ Each phase is a separate PR, test-driven (failing test first), and keeps `npm te
   - Edit updates the same linked account ID.
   - The accept gate while `PENDING`.
 
+- [x] Payout step is mandatory at onboarding **when `PAYMENTS_ENABLED` is on** (the app reads `GET /api/config`). With payments off, onboarding is unchanged, since there's no gateway to create the account with.
+- [x] `POST /api/artists/payout-account` for first-time setup by artists onboarded before payments, or a retry after `REJECTED`. `PUT` changes the bank account on the same linked account.
+- [x] Payout identifiers are stripped from every JSON response by a global replacer (`src/lib/redact.ts`). Booking lists and discovery embed the artist row, so excluding them per query wasn't reliable.
+- [x] Activation is refreshed from Razorpay (artist's GET, the 5-minute sweep, and `product.route.*` / `account.*` webhooks). Status is never taken from the webhook payload.
+
 ### Phase 6: Mobile checkout
-- [ ] `GET /pay/:orderId` checkout page (server-rendered, loads `checkout.js`).
-- [ ] App: a **Pay ₹X** button, `expo-web-browser` checkout, the `stagely://payment-result` deep link, and status polling.
-- [ ] Status labels and colours for all new statuses. Buttons for **Report a problem** and **Cancel**.
-- [ ] Admin app: a disputes list and a resolve screen.
+- [x] `GET /pay/:orderId` checkout page (server-rendered, loads `checkout.js`).
+- [x] App: a **Pay ₹X** button, `expo-web-browser` checkout, the `stagely://payment-result` deep link, and status polling.
+- [x] Status labels and colours for all new statuses. Buttons for **Report a problem** and **Cancel**.
+- [x] Admin app: a disputes list and a resolve screen.
+
+- [x] The checkout page takes `?return=` (only `stagely:`, `exp:`, `exps:` are accepted, so Expo Go works) and uses a nonce-based CSP for Razorpay's script.
+- [x] Development without Razorpay keys: the page shows **Simulate successful payment** (fake gateway only, never in production).
 
 ### Phase 7: End-to-end in Razorpay Test Mode
 - [ ] Run a local tunnel (`cloudflared` or `ngrok`) and register the test webhook.
 - [ ] Walk the full path with `success@razorpay`: request, accept, pay, complete, transfer released.
 - [ ] Walk the failure paths: failed payment, payment expiry, artist cancel (refund), dispute (refund and split).
-- [ ] Update `docs/wiki/workflows.md` and `docs/wiki/architecture.md`.
+- [x] Update `docs/wiki/workflows.md` and `docs/wiki/architecture.md`.
+- [x] Automated end to end against the fake gateway (`tests/e2e_payments.test.ts`): onboarding with payouts, verification, activation, request, accept, hosted checkout, payment, completion, release and review, plus a dispute resolved by a split.
+- [ ] **Pending (needs Razorpay Test Mode keys):** the manual walkthrough in `docs/wiki/payments-test-mode.md`. It's the first real exercise of the Razorpay adapter, and the linked-account field names are unverified.
 
 ### Phase 8: Go-live checklist
 - [ ] KYC approved, Route live, live keys on the production server.
